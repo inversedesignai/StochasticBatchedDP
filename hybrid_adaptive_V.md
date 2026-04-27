@@ -1,32 +1,32 @@
-# Terminal value design for SBDP
+# Terminal value design for SSDP
 
 This note develops a principled choice of terminal value function V_T for
-SBDP's batched receding-horizon Bellman recursion.  The result is a closed-form
+SSDP's segmented receding-horizon Bellman recursion.  The result is a closed-form
 hybrid of posterior variance and the recursive Bayesian Cramer-Rao bound, with
 an optional adaptive residual on top.
 
 ## 1. Motivation: why V_T matters
 
-SBDP solves the K_total-step adaptive measurement problem by decomposing it
-into ⌈K_total / K_batch⌉ batches of K_batch steps each.  Within a batch, exact
-Bellman recursion finds the optimal sub-policy.  Across batches, the receding
-horizon advances: each batch starts from the posterior its predecessor left
+SSDP solves the K_total-step adaptive measurement problem by decomposing it
+into ⌈K_total / K_segment⌉ segments of K_segment steps each.  Within a segment, exact
+Bellman recursion finds the optimal sub-policy.  Across segments, the receding
+horizon advances: each segment starts from the posterior its predecessor left
 behind.
 
-The Bellman recursion within a batch needs a terminal condition.  At step
-k_rem = 0 of the recursion (the last step of the batch, looking forward to
+The Bellman recursion within a segment needs a terminal condition.  At step
+k_rem = 0 of the recursion (the last step of the segment, looking forward to
 the boundary), the planner must assign a value to every reachable belief b at
 the boundary.  This value V_T(b, k_rem) is the cost-to-go from b through the
 remaining K_total − k_executed measurements.
 
 If V_T were exactly the optimal cost-to-go V*(b, k_rem), the receding-horizon
-decomposition would be globally optimal regardless of K_batch.  Any
+decomposition would be globally optimal regardless of K_segment.  Any
 approximation error in V_T propagates as suboptimality of the realized policy.
-The size of this gap depends on K_batch (longer lookahead within a batch
+The size of this gap depends on K_segment (longer lookahead within a segment
 forgives a worse V_T) and on how badly V_T misrepresents the future cost.
 
 The design question is: what closed-form V_T tracks V*(b, k_rem) well enough
-that K_batch = 4 is sufficient lookahead, and what residual correction can
+that K_segment = 4 is sufficient lookahead, and what residual correction can
 adapt away the remaining gap?
 
 ## 2. Two natural anchors
@@ -46,15 +46,15 @@ posterior mean.  It has three appealing properties:
 2. **Multimodality awareness.**  A wrapped multimodal posterior at φ_max = 0.5
    has large variance because of mode separation.  Using posterior variance as
    terminal value reads "multimodal posterior is expensive", pressuring the
-   planner to disambiguate.  This is exactly the inductive bias SBDP exploits.
+   planner to disambiguate.  This is exactly the inductive bias SSDP exploits.
 3. **Closed-form** for any explicit belief representation.
 
 The flaw is structural: posterior variance assumes zero further measurements.
-At a non-final batch boundary, k_rem more measurements are still scheduled,
+At a non-final segment boundary, k_rem more measurements are still scheduled,
 and they will reduce the actual cost.  Posterior variance therefore
-overestimates V*(b, k_rem) at every batch except the last.  The error is
-largest at the first batch boundary (most measurements still to come) and
-zero at the final batch boundary.
+overestimates V*(b, k_rem) at every segment except the last.  The error is
+largest at the first segment boundary (most measurements still to come) and
+zero at the final segment boundary.
 
 ### 2.2 PCRB sum (best-case future)
 
@@ -73,7 +73,7 @@ the Fisher information at the posterior mode and assumes the posterior shape
 is well-approximated by a Gaussian centered there.  In the multimodal regime
 this is wrong: the Fisher information at any single mode is finite and
 optimistic, ignoring the cost of mode disambiguation.  PCRB therefore
-underestimates V*(b, k_rem) in the wide-prior regime, exactly where SBDP must
+underestimates V*(b, k_rem) in the wide-prior regime, exactly where SSDP must
 make its hardest decisions.
 
 ### 2.3 Bias direction summary
@@ -133,7 +133,7 @@ V_canonical(b, k_rem; c) = 1 / J_B(k_rem; b, c).
 ### 4.1 Limit checks
 
 - **k_rem = 0:** the sum is empty, J_B = 1 / Var(b), V_canonical = Var(b).
-  Recovers posterior variance.  Tight at the final batch boundary.
+  Recovers posterior variance.  Tight at the final segment boundary.
 - **k_rem large:** the Fisher sum dominates the prior term, V_canonical scales
   like 1 / Σ F_j, recovering the standard PCRB asymptotics.
 - **All intermediate k_rem:** smoothly interpolated through one closed-form
@@ -166,7 +166,7 @@ A multimodal wrapped posterior at φ_max = 0.5 has Var(b) inflated by the
 mode-separation contribution, even when the per-mode curvature is sharp.
 This makes 1/Var(b) small, the prior term in J_B contributes little, and
 V_canonical stays high.  The planner reads the boundary belief as expensive,
-which is exactly the disambiguation pressure SBDP needs.
+which is exactly the disambiguation pressure SSDP needs.
 
 This is the property that PCRB_sum alone lacks: PCRB uses the Fisher
 information at a single mode and ignores mode separation.  The BCRB hybrid
@@ -181,28 +181,28 @@ existing terminology avoids reviewer confusion.  The novelty in this note is
 not the recursion itself (well-known since 1998), but its use as the
 canonical terminal value in receding-horizon adaptive measurement.
 
-### 4.5 Per-batch policy structure
+### 4.5 Per-segment policy structure
 
-The k_rem dependence of V_canonical changes the cross-batch policy structure
+The k_rem dependence of V_canonical changes the cross-segment policy structure
 relative to a static V_T.
 
 | Setting                      | Bellman operator         | Policy function           |
 |------------------------------|--------------------------|---------------------------|
-| Static V_T (constant)        | identical across batches | identical π*(b); only realized actions differ across batches because entry beliefs differ |
-| Hybrid V (k_rem-dependent)   | batch-dependent          | different π*_k(b) per batch |
+| Static V_T (constant)        | identical across segments | identical π*(b); only realized actions differ across segments because entry beliefs differ |
+| Hybrid V (k_rem-dependent)   | segment-dependent          | different π*_k(b) per segment |
 
-With the hybrid V, each batch's inner Bellman uses a different terminal
-condition (V_canonical evaluated at that batch's boundary k_rem), so the
-resulting policy function differs from batch to batch.  Mathematically this
+With the hybrid V, each segment's inner Bellman uses a different terminal
+condition (V_canonical evaluated at that segment's boundary k_rem), so the
+resulting policy function differs from segment to segment.  Mathematically this
 is one non-stationary finite-horizon policy π*(b, k_rem) evaluated at the
-appropriate k_rem within each batch.  ψ remains a single shared parameter
-vector if the residual is included; the planner extracts different per-batch
+appropriate k_rem within each segment.  ψ remains a single shared parameter
+vector if the residual is included; the planner extracts different per-segment
 policies from the same ψ.
 
-**Implementation.**  Recompute the inner Bellman per batch.  The count-tuple
-grid is anchored at each batch's entry belief regardless of V choice, so this
-adds no overhead beyond the existing per-batch recursion.  Caching π*_k(b)
-across batches is not useful because each k has its own k_rem.
+**Implementation.**  Recompute the inner Bellman per segment.  The count-tuple
+grid is anchored at each segment's entry belief regardless of V choice, so this
+adds no overhead beyond the existing per-segment recursion.  Caching π*_k(b)
+across segments is not useful because each k has its own k_rem.
 
 ## 5. Adaptive residual on top
 
@@ -239,51 +239,51 @@ constraint and bounds amplitude to V_canonical.  dim(ψ) ≤ 30 is plenty.
 
 ### 5.2 Update rule
 
-Same K_batch-step TD bootstrap as before, but only the residual is fit:
+Same K_segment-step TD bootstrap as before, but only the residual is fit:
 
 L(ψ) = Σ_k [ δ(b_entry_k, k_rem_k; ψ)
-            − ( R_k + V(b_exit_k, k_rem_k − K_batch; ψ_target, c)
+            − ( R_k + V(b_exit_k, k_rem_k − K_segment; ψ_target, c)
                     − V_canonical(b_entry_k, k_rem_k; c) ) ]²
        + λ ||ψ||²
 
-R_k is the realized batch return.  ψ_target is a periodic snapshot of ψ.
+R_k is the realized segment return.  ψ_target is a periodic snapshot of ψ.
 Setting λ → ∞ recovers the static BCRB hybrid as a clean ablation.
 
 ### 5.3 Decoupling from c-gradient
 
 During the outer SGD step on c, treat ψ as fixed (semi-gradient).  The
-envelope-theorem gradient on c then has two contributions: the within-batch
-trajectory (handled by the existing SBDP machinery) and the boundary term
+envelope-theorem gradient on c then has two contributions: the within-segment
+trajectory (handled by the existing SSDP machinery) and the boundary term
 
 ∂V/∂c at b_exit = ∂V_canonical/∂c + ∂δ/∂c.
 
 ∂V_canonical/∂c is closed-form through the Fisher recursion.  ∂δ/∂c is zero
 because δ depends on c only through the belief features m_i(b), which feed
-through the within-batch trajectory and are already accounted for there.
+through the within-segment trajectory and are already accounted for there.
 
 ## 6. When the static hybrid suffices
 
 The static hybrid V_canonical (ψ ≡ 0) is expected to suffice for the headline
-SBDP results.  The residual δ is reserved for diagnostic regimes.  Four
+SSDP results.  The residual δ is reserved for diagnostic regimes.  Four
 arguments support this expectation.
 
 **6.1 Receding horizon washes out the projection error.**
 
 V_canonical assumes optimal non-adaptive future continuation, but this
-assumption only governs the *projected* boundary value at the current batch.
-The next batch reseeds the recursion at the realized exit belief, replacing
+assumption only governs the *projected* boundary value at the current segment.
+The next segment reseeds the recursion at the realized exit belief, replacing
 the projection with adaptive realization.  Cumulative non-adaptive bias is
-bounded by the per-batch projection error, not by K_total.  The error does
-not compound across batches.
+bounded by the per-segment projection error, not by K_total.  The error does
+not compound across segments.
 
 **6.2 The inner Bellman absorbs adaptation locally.**
 
-K_batch = 4 of exact Bellman is genuine adaptive lookahead.  Disambiguation
+K_segment = 4 of exact Bellman is genuine adaptive lookahead.  Disambiguation
 at φ_max = 0.5 (short τ first to break the 2π aliasing, long τ for refinement
-once the posterior is unimodal) operates on a 1-3 step timescale.  K_batch = 4
+once the posterior is unimodal) operates on a 1-3 step timescale.  K_segment = 4
 captures the qualitative posterior transitions; the non-adaptive projection
 is approximately correct once the posterior has gone unimodal, which happens
-within one or two batches.
+within one or two segments.
 
 **6.3 Multimodality already enters through Var(b).**
 
@@ -293,7 +293,7 @@ have to learn.  The static hybrid gets it for free, no fitting required.
 
 **6.4 Adaptive vs non-adaptive affects constants, not scaling.**
 
-For the headline SBDP-vs-HW ratio (5× at K = 16, 10× at K = 32), the leading
+For the headline SSDP-vs-HW ratio (5× at K = 16, 10× at K = 32), the leading
 scaling of the ratio is set by Heisenberg vs shot-noise-limited continuation,
 which is the same for adaptive and non-adaptive optimal future schedules.
 The adaptive correction at the boundary is a constant-factor improvement,
@@ -305,13 +305,13 @@ the order-of-magnitude headline.
 
 Three regimes where δ should be added back:
 
-- **K_batch reduced to 2 or 1** (memory-constrained variant).  Less inner
+- **K_segment reduced to 2 or 1** (memory-constrained variant).  Less inner
   adaptive lookahead, more burden on the boundary value, larger projection
-  error per batch.
+  error per segment.
 - **Increment A underperforms expectations** AND ablation shows the gap is
   at the boundary value rather than outer-SGD optimization noise.  Diagnostic
-  test: SBDP at K_total = 16 lands close to HW (ratio < 3×), and inflating
-  K_batch to 8 closes the gap.  This isolates the deficit to lookahead.
+  test: SSDP at K_total = 16 lands close to HW (ratio < 3×), and inflating
+  K_segment to 8 closes the gap.  This isolates the deficit to lookahead.
 - **Reviewer or co-author requests the fully adaptive version** as a
   robustness check.  Cheap to add as a follow-up; do not let it block
   Phase 1.
@@ -330,7 +330,7 @@ Three increments, each independently testable.
 
 **Increment A (Phase 1 calibration).**  Static V_canonical only, ψ = 0.  This
 is the closed-form BCRB hybrid.  No learning, no extra moving parts.  Use
-this as the reference SBDP run.  If this already meets the headline targets
+this as the reference SSDP run.  If this already meets the headline targets
 (K_total = 16: ≥ 5× HW; K_total = 32: ≥ 10× HW), the residual is unnecessary
 and the writeup stays simple.  Per Section 6 this is the expected outcome.
 
@@ -339,7 +339,7 @@ and the writeup stays simple.  Per Section 6 this is the expected outcome.
 the static hybrid is already close to optimal.
 
 **Increment C (research extension).**  Reduce λ, allow δ to do real work.
-Compare to Increment A as ablation.  Report the SBDP-vs-HW ratio under each
+Compare to Increment A as ablation.  Report the SSDP-vs-HW ratio under each
 of the three settings.
 
 ## 8. Implementation notes
@@ -366,7 +366,7 @@ pathology of unconstrained value learning.  Combined with target-network
 
 ## 9. Summary
 
-The terminal value V_T at SBDP batch boundaries should be the recursive
+The terminal value V_T at SSDP segment boundaries should be the recursive
 Bayesian Cramer-Rao bound seeded at the current belief and propagated forward
 under optimal non-adaptive future continuation:
 
@@ -374,15 +374,15 @@ V_canonical(b, k_rem; c) = ( 1 / Var(b) + Σ_{j=1}^{k_rem} F_j(τ_j*, c) )⁻¹.
 
 This is the unique closed-form expression that combines the strengths of the
 posterior-variance and PCRB-sum anchors without the scale and bias problems
-of either alone.  It recovers posterior variance at the final batch boundary,
+of either alone.  It recovers posterior variance at the final segment boundary,
 PCRB-sum asymptotics at long horizon, and is multimodality-aware through the
 Var(b) term.
 
-The static hybrid (ψ ≡ 0) is expected to suffice for the headline SBDP
-results: receding horizon caps the projection error per batch, K_batch = 4
+The static hybrid (ψ ≡ 0) is expected to suffice for the headline SSDP
+results: receding horizon caps the projection error per segment, K_segment = 4
 of inner Bellman absorbs local adaptation, Var(b) supplies multimodality
 pressure for free, and adaptive vs non-adaptive at the boundary is a
 constant-factor correction below the headline order of magnitude.  An
 optional learned residual δ ≤ 0, gated by V_canonical and constrained to
-vanish at k_rem = 0, is reserved for diagnostic regimes (K_batch ≤ 2,
+vanish at k_rem = 0, is reserved for diagnostic regimes (K_segment ≤ 2,
 isolated boundary-value gap from ablation).

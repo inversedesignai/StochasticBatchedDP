@@ -22,7 +22,7 @@
 
 \newtheorem{lemma}{Lemma}
 
-\title{Stochastic Batched Dynamic Programming\\
+\title{Stochastic Segmented Dynamic Programming\\
        \large A scaling strategy for joint hardware-policy co-design beyond the exact-DP horizon ceiling}
 \author{}
 \date{}
@@ -36,13 +36,13 @@ admits an efficient sufficient-statistic memoization for many problems of intere
 memoization grows fast enough in horizon $K$ that exact solutions are typically capped at
 $K \approx 4$--$5$.  Joint hardware-policy co-design, where a continuous hardware parameter
 $\bc$ is optimized jointly with the inner Bellman-optimal policy $\pi^\star(\bc)$, inherits this
-ceiling.  We develop a scaling extension: \emph{stochastic batched dynamic programming},
-which combines (i) a batched receding-horizon decomposition of the inner Bellman problem
-into $n$ tractable batches of length $K_\mathrm{batch}$ and (ii) stochastic Monte-Carlo
-sampling of batch-boundary trajectories at outer-gradient time, replacing the intractable
-enumeration over reachable batch-boundary beliefs.  The resulting estimator is unbiased,
+ceiling.  We develop a scaling extension: \emph{stochastic segmented dynamic programming},
+which combines (i) a segmented receding-horizon decomposition of the inner Bellman problem
+into $n$ tractable segments of length $K_\mathrm{segment}$ and (ii) stochastic Monte-Carlo
+sampling of segment-boundary trajectories at outer-gradient time, replacing the intractable
+enumeration over reachable segment-boundary beliefs.  The resulting estimator is unbiased,
 per-sample gradients are exact via the sharp-max envelope theorem, and the wall-clock cost
-scales linearly in the sample size and the number of batches rather than in the reachable
+scales linearly in the sample size and the number of segments rather than in the reachable
 belief count.  The construction generalizes naturally and preserves the exactness
 guarantees of joint dynamic programming on the sampled sub-problems.
 \end{abstract}
@@ -104,87 +104,87 @@ or more by $K = 5$ or $6$.  Memory becomes the binding constraint.
 For practical hardware (modest workstation, $\sim 1$~TB RAM) the exact-DP ceiling is
 typically $K_\mathrm{max} \in \{4, 5\}$.  Beyond that we descend to approximations.
 
-\section{Batched dynamic programming}
-\label{sec:batched}
+\section{Segmented dynamic programming}
+\label{sec:segmented}
 
 Suppose the deployment horizon $K_\mathrm{total}$ is much larger than the exact-DP ceiling
-$K_\mathrm{batch} \le K_\mathrm{max}$, with $K_\mathrm{total} = n \cdot K_\mathrm{batch}$
-for some integer $n$.  Define a \emph{batched policy} $\pi^\mathrm{batch}$ as follows:
+$K_\mathrm{segment} \le K_\mathrm{max}$, with $K_\mathrm{total} = n \cdot K_\mathrm{segment}$
+for some integer $n$.  Define a \emph{segmented policy} $\pi^\mathrm{segment}$ as follows:
 
 \begin{enumerate}[nosep, leftmargin=2em]
-\item At step $k = 0$, with belief $\bb_0 = p_0$, solve exact Bellman for $K_\mathrm{batch}$
-      epochs starting at $\bb_0$.  Use the resulting policy $\pi^{(1)}$ for steps $1, \ldots, K_\mathrm{batch}$.
-\item At step $k = K_\mathrm{batch}$, with belief $\bb_{K_\mathrm{batch}}$ resulting from
-      executing $\pi^{(1)}$ on the realized observations, solve exact Bellman for $K_\mathrm{batch}$
-      epochs starting at $\bb_{K_\mathrm{batch}}$.  Use $\pi^{(2)}$ for the next $K_\mathrm{batch}$ steps.
-\item Repeat for $n$ batches total.
+\item At step $k = 0$, with belief $\bb_0 = p_0$, solve exact Bellman for $K_\mathrm{segment}$
+      epochs starting at $\bb_0$.  Use the resulting policy $\pi^{(1)}$ for steps $1, \ldots, K_\mathrm{segment}$.
+\item At step $k = K_\mathrm{segment}$, with belief $\bb_{K_\mathrm{segment}}$ resulting from
+      executing $\pi^{(1)}$ on the realized observations, solve exact Bellman for $K_\mathrm{segment}$
+      epochs starting at $\bb_{K_\mathrm{segment}}$.  Use $\pi^{(2)}$ for the next $K_\mathrm{segment}$ steps.
+\item Repeat for $n$ segments total.
 \end{enumerate}
 
-Each batch is locally Bellman-optimal over its $K_\mathrm{batch}$-step subproblem; the
+Each segment is locally Bellman-optimal over its $K_\mathrm{segment}$-step subproblem; the
 overall procedure is a receding-horizon approximation to the full $K_\mathrm{total}$
-Bellman, suboptimal at the start (because $\pi^{(1)}$ plans only $K_\mathrm{batch}$ steps
-ahead even though $K_\mathrm{total} - K_\mathrm{batch}$ steps remain) and tight at the end.
+Bellman, suboptimal at the start (because $\pi^{(1)}$ plans only $K_\mathrm{segment}$ steps
+ahead even though $K_\mathrm{total} - K_\mathrm{segment}$ steps remain) and tight at the end.
 
-\subsection{The value of a batched policy}
+\subsection{The value of a segmented policy}
 
-The expected reward under the batched policy starting from $\bb_0 = p_0$ is
+The expected reward under the segmented policy starting from $\bb_0 = p_0$ is
 \begin{equation}
-V^\mathrm{batch}(p_0;\, \bc)
+V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
-\E_{\bb_{K_\mathrm{batch}} \sim P(\,\cdot\,\mid p_0, \pi^{(1)},\, \bc)}\!
-\bigl[\,V^\mathrm{batch}(\bb_{K_\mathrm{batch}};\, \bc, \text{remaining } n - 1 \text{ batches})\,\bigr],
-\label{eq:Vbatch_recursive}
+\E_{\bb_{K_\mathrm{segment}} \sim P(\,\cdot\,\mid p_0, \pi^{(1)},\, \bc)}\!
+\bigl[\,V^\mathrm{segment}(\bb_{K_\mathrm{segment}};\, \bc, \text{remaining } n - 1 \text{ segments})\,\bigr],
+\label{eq:Vseg_recursive}
 \end{equation}
 unfolding to
 \begin{equation}
-V^\mathrm{batch}(p_0;\, \bc)
+V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
-\sum_{\bb_{K_\mathrm{batch}}}\, P(\bb_{K_\mathrm{batch}} \mid p_0, \pi^{(1)},\, \bc)\,
-V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}};\, \bc),
-\label{eq:Vbatch_2batch}
+\sum_{\bb_{K_\mathrm{segment}}}\, P(\bb_{K_\mathrm{segment}} \mid p_0, \pi^{(1)},\, \bc)\,
+V_0^{\mathrm{segment}_2}(\bb_{K_\mathrm{segment}};\, \bc),
+\label{eq:Vseg_2seg}
 \end{equation}
-in the two-batch case ($n = 2$), where $V_0^{\mathrm{batch}_2}$ denotes the standard
-$K_\mathrm{batch}$ Bellman value at the new starting belief $\bb_{K_\mathrm{batch}}$ over
-the second batch.  The sum is over reachable batch-boundary beliefs.
+in the two-segment case ($n = 2$), where $V_0^{\mathrm{segment}_2}$ denotes the standard
+$K_\mathrm{segment}$ Bellman value at the new starting belief $\bb_{K_\mathrm{segment}}$ over
+the second segment.  The sum is over reachable segment-boundary beliefs.
 
-\subsection{The curse of enumeration over batch-boundary beliefs}
+\subsection{The curse of enumeration over segment-boundary beliefs}
 
-To compute Equation~\eqref{eq:Vbatch_2batch} exactly we would need
-$V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}};\, \bc)$ at every reachable
-$\bb_{K_\mathrm{batch}}$.  In the count-tuple-keyed setting this is one fresh
-$K_\mathrm{batch}$ Bellman solve per reachable count-tuple after batch~1.  At
-$K_\mathrm{batch} = 4$ the reachable count-tuple set is $\sim 10^7$ in unfavourable
+To compute Equation~\eqref{eq:Vseg_2seg} exactly we would need
+$V_0^{\mathrm{segment}_2}(\bb_{K_\mathrm{segment}};\, \bc)$ at every reachable
+$\bb_{K_\mathrm{segment}}$.  In the count-tuple-keyed setting this is one fresh
+$K_\mathrm{segment}$ Bellman solve per reachable count-tuple after segment~1.  At
+$K_\mathrm{segment} = 4$ the reachable count-tuple set is $\sim 10^7$ in unfavourable
 regimes, and each fresh solve costs $\sim 10$~seconds: enumeration cost is $10^8$ seconds
 (thousands of CPU-years).
 
-This is the same memo blow-up that capped exact $K_\mathrm{total} = K_\mathrm{batch} + 1$
-in the first place, just relocated to the batch boundary.  Batched DP, naively
+This is the same memo blow-up that capped exact $K_\mathrm{total} = K_\mathrm{segment} + 1$
+in the first place, just relocated to the segment boundary.  Segmented DP, naively
 implemented, does not break the exact-DP ceiling.
 
-\section{Stochastic batched DP}
+\section{Stochastic segmented DP}
 \label{sec:stochastic}
 
 The standard remedy for an intractable expectation over a large index set is to replace
 exhaustive enumeration with Monte-Carlo sampling under the natural distribution
-$P(\bb_{K_\mathrm{batch}} \mid p_0, \pi^{(1)},\, \bc)$.
+$P(\bb_{K_\mathrm{segment}} \mid p_0, \pi^{(1)},\, \bc)$.
 
 \subsection{The estimator}
 
-Sample $M$ trajectories under the current batched policy.  For each trajectory $m$ define
-$\bb_{K_\mathrm{batch}}^{(m)}$ as the realized batch-1 terminal belief.  The estimator
+Sample $M$ trajectories under the current segmented policy.  For each trajectory $m$ define
+$\bb_{K_\mathrm{segment}}^{(m)}$ as the realized segment-1 terminal belief.  The estimator
 \begin{equation}
-\widehat{V}^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\widehat{V}^\mathrm{segment}(p_0;\, \bc; \mathcal{M})
 \;:=\;
 \frac{1}{M} \sum_{m=1}^{M}
-V_0^{\mathrm{batch}_2}\bigl(\bb_{K_\mathrm{batch}}^{(m)};\, \bc\bigr)
+V_0^{\mathrm{segment}_2}\bigl(\bb_{K_\mathrm{segment}}^{(m)};\, \bc\bigr)
 \label{eq:estimator}
 \end{equation}
-is an unbiased estimator of Equation~\eqref{eq:Vbatch_2batch}: the trajectories
-$\mathcal{M} = \{\bb_{K_\mathrm{batch}}^{(m)}\}_{m=1}^M$ are i.i.d.\ samples from the
+is an unbiased estimator of Equation~\eqref{eq:Vseg_2seg}: the trajectories
+$\mathcal{M} = \{\bb_{K_\mathrm{segment}}^{(m)}\}_{m=1}^M$ are i.i.d.\ samples from the
 correct policy-induced distribution, and the integrand is computed exactly per sample by
-solving fresh $K_\mathrm{batch}$ Bellman from $\bb_{K_\mathrm{batch}}^{(m)}$.
+solving fresh $K_\mathrm{segment}$ Bellman from $\bb_{K_\mathrm{segment}}^{(m)}$.
 
-The variance of the estimator scales as $\Var[V_0^{\mathrm{batch}_2}] / M$ where the
+The variance of the estimator scales as $\Var[V_0^{\mathrm{segment}_2}] / M$ where the
 variance is over the trajectory distribution; standard concentration inequalities give
 the $1/\sqrt{M}$ confidence intervals.
 
@@ -192,11 +192,11 @@ the $1/\sqrt{M}$ confidence intervals.
 
 For outer optimization we need not just the value but its gradient with respect to $\bc$.
 For each sampled trajectory we apply the sharp-max envelope theorem to the
-$K_\mathrm{batch}$-step subproblem starting at $\bb_{K_\mathrm{batch}}^{(m)}$:
+$K_\mathrm{segment}$-step subproblem starting at $\bb_{K_\mathrm{segment}}^{(m)}$:
 \begin{enumerate}[nosep, leftmargin=2em]
-\item Run forward $K_\mathrm{batch}$ Bellman from $\bb_{K_\mathrm{batch}}^{(m)}$.  Record
-      the optimal argmax action at every reachable belief in the second batch's subtree.
-\item Re-evaluate $V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)$ by
+\item Run forward $K_\mathrm{segment}$ Bellman from $\bb_{K_\mathrm{segment}}^{(m)}$.  Record
+      the optimal argmax action at every reachable belief in the second segment's subtree.
+\item Re-evaluate $V_0^{\mathrm{segment}_2}(\bb_{K_\mathrm{segment}}^{(m)};\, \bc)$ by
       substituting the recorded argmaxes in place of the $\max$ operator.  This produces
       an argmax-free expression in $\bc$.
 \item Apply reverse-mode automatic differentiation to the argmax-free expression.
@@ -204,27 +204,27 @@ $K_\mathrm{batch}$-step subproblem starting at $\bb_{K_\mathrm{batch}}^{(m)}$:
 
 The envelope theorem certifies that the resulting gradient is exact:
 \begin{equation}
-\frac{\partial V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)}{\partial \bc}
+\frac{\partial V_0^{\mathrm{segment}_2}(\bb_{K_\mathrm{segment}}^{(m)};\, \bc)}{\partial \bc}
 \;=\;
-\left.\frac{\partial}{\partial \bc}\right|_{\pi^\star_{batch_2} \text{ frozen}}
-V_0^{\mathrm{batch}_2}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc).
+\left.\frac{\partial}{\partial \bc}\right|_{\pi^\star_{segment_2} \text{ frozen}}
+V_0^{\mathrm{segment}_2}(\bb_{K_\mathrm{segment}}^{(m)};\, \bc).
 \label{eq:envelope}
 \end{equation}
-The first batch's contribution to the gradient (through how $\pi^{(1)}$ shapes the sampling
-distribution of $\bb_{K_\mathrm{batch}}$) follows the same envelope-theorem-frozen recursion
-applied to batch 1, and contributes a score-function term in $\partial \log P / \partial \bc$
+The first segment's contribution to the gradient (through how $\pi^{(1)}$ shapes the sampling
+distribution of $\bb_{K_\mathrm{segment}}$) follows the same envelope-theorem-frozen recursion
+applied to segment 1, and contributes a score-function term in $\partial \log P / \partial \bc$
 that can be carried via reverse-mode AD on the trajectory's likelihood, exactly as in the
-single-batch joint-DP gradient.
+single-segment joint-DP gradient.
 
 The aggregate gradient
 \begin{equation}
-\widehat{\nabla}_{\bc} V^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\widehat{\nabla}_{\bc} V^\mathrm{segment}(p_0;\, \bc; \mathcal{M})
 \;=\;
 \frac{1}{M} \sum_{m=1}^{M}
 \frac{\partial V^{(m)}(\bc)}{\partial \bc}
 \label{eq:agg_grad}
 \end{equation}
-is unbiased for $\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)$ and has the standard SGD
+is unbiased for $\nabla_{\bc} V^\mathrm{segment}(p_0;\, \bc)$ and has the standard SGD
 variance scaling.
 
 \subsection{Outer SGD update}
@@ -232,74 +232,74 @@ variance scaling.
 The outer optimization becomes Adam (or any preferred stochastic optimizer) on $\bc$ with
 mini-batches of size $M$:
 \begin{equation}
-\bc^{(t+1)} = \mathrm{Adam}\bigl(\bc^{(t)},\; \widehat{\nabla}_{\bc} V^\mathrm{batch}(p_0;\, \bc^{(t)}; \mathcal{M}^{(t)}),\; \eta\bigr).
+\bc^{(t+1)} = \mathrm{Adam}\bigl(\bc^{(t)},\; \widehat{\nabla}_{\bc} V^\mathrm{segment}(p_0;\, \bc^{(t)}; \mathcal{M}^{(t)}),\; \eta\bigr).
 \end{equation}
 A fresh trajectory mini-batch $\mathcal{M}^{(t)}$ is sampled at each iteration $t$, so the
 variance does not compound across iterations.  Standard SGD convergence theory applies:
 under bounded gradient variance and standard step-size schedules the iterates converge in
-expectation to a stationary point of $V^\mathrm{batch}(p_0;\, \bc)$.
+expectation to a stationary point of $V^\mathrm{segment}(p_0;\, \bc)$.
 
 \section{Gradient computation: a detailed derivation}
 \label{sec:gradient}
 
-This section derives the SBDP outer-hardware gradient explicitly.  We work the two-batch
+This section derives the SSDP outer-hardware gradient explicitly.  We work the two-segment
 case ($n = 2$) in full detail, identifying every $\bc$-dependence and unfolding each chain
-rule.  We then generalize to $n > 2$ batches recursively.  No step is skipped; the goal is
+rule.  We then generalize to $n > 2$ segments recursively.  No step is skipped; the goal is
 that the formula in the algorithm box can be derived directly from first principles by
 following this section.
 
-\subsection{Setup for the two-batch case}
+\subsection{Setup for the two-segment case}
 \label{sec:n2_setup}
 
-For $n = 2$ with $K_\mathrm{total} = 2 K_\mathrm{batch}$, the batched value is
+For $n = 2$ with $K_\mathrm{total} = 2 K_\mathrm{segment}$, the segmented value is
 \begin{equation}
-V^\mathrm{batch}(p_0;\, \bc)
+V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
 \E_{\bx \sim p_0}\,
-\E_{(\by_1, \ldots, \by_{K_\mathrm{batch}}) \mid \bx, \pi^{[1]}(\bc), \bc}
+\E_{(\by_1, \ldots, \by_{K_\mathrm{segment}}) \mid \bx, \pi^{[1]}(\bc), \bc}
 \!\left[\,
-V^{[2]}\bigl(\bb_{K_\mathrm{batch}}(\bx, \by_{1:K_\mathrm{batch}}; \bc);\, \bc\bigr)
+V^{[2]}\bigl(\bb_{K_\mathrm{segment}}(\bx, \by_{1:K_\mathrm{segment}}; \bc);\, \bc\bigr)
 \,\right],
-\label{eq:Vbatch_n2}
+\label{eq:Vseg_n2}
 \end{equation}
 where
 \begin{itemize}[nosep,leftmargin=2em]
-\item $\pi^{[1]}(\bc)$ is the batch-1 policy obtained by exact $K_\mathrm{batch}$ Bellman
-      from $p_0$ at parameter $\bc$.  Each action in batch~1 is the local argmax
+\item $\pi^{[1]}(\bc)$ is the segment-1 policy obtained by exact $K_\mathrm{segment}$ Bellman
+      from $p_0$ at parameter $\bc$.  Each action in segment~1 is the local argmax
       $\bs_k = \pi^{[1]}(\bb_{k-1};\, \bc)$.
 \item $\bb_{k} = T(\bb_{k-1}, \bs_k, \by_k;\, \bc)$ is the Bayesian belief update.
-\item $V^{[2]}(\bb;\, \bc)$ is the standard $K_\mathrm{batch}$ Bellman value at starting
-      belief $\bb$ with parameter $\bc$.  Because batch~2 is the last batch, its local
+\item $V^{[2]}(\bb;\, \bc)$ is the standard $K_\mathrm{segment}$ Bellman value at starting
+      belief $\bb$ with parameter $\bc$.  Because segment~2 is the last segment, its local
       terminal coincides with the global terminal $\Phi_0$.
 \end{itemize}
 
-The trajectory is the tuple $\tau := (\bx, \by_1, \ldots, \by_{K_\mathrm{batch}})$ with
+The trajectory is the tuple $\tau := (\bx, \by_1, \ldots, \by_{K_\mathrm{segment}})$ with
 joint density
 \begin{equation}
-P(\tau;\, \bc) \;=\; p_0(\bx) \cdot \prod_{k=1}^{K_\mathrm{batch}} p\bigl(\by_k \mid \bx, \bs_k(\tau_{<k}, \bc);\, \bc\bigr),
+P(\tau;\, \bc) \;=\; p_0(\bx) \cdot \prod_{k=1}^{K_\mathrm{segment}} p\bigl(\by_k \mid \bx, \bs_k(\tau_{<k}, \bc);\, \bc\bigr),
 \label{eq:trajdensity}
 \end{equation}
 where $\bs_k(\tau_{<k}, \bc) = \pi^{[1]}(\bb_{k-1}(\tau_{<k}, \bc);\, \bc)$ is the
-deterministic action under the batch-1 policy.
+deterministic action under the segment-1 policy.
 
-We want $\nabla_{\bc}\, V^\mathrm{batch}(p_0;\, \bc)$.
+We want $\nabla_{\bc}\, V^\mathrm{segment}(p_0;\, \bc)$.
 
 \subsection{Identifying every \texorpdfstring{$\bc$}{c}-dependence}
 \label{sec:c_dependences}
 
-Equation~\eqref{eq:Vbatch_n2} has $\bc$ entering through five distinct paths.  We list
+Equation~\eqref{eq:Vseg_n2} has $\bc$ entering through five distinct paths.  We list
 them explicitly because each contributes to the gradient differently:
 
 \begin{enumerate}[nosep,leftmargin=2em]
-\item[(P1)] \emph{Batch-1 policy actions} $\bs_k(\tau_{<k}, \bc)$ via the argmax of the local
-      $K_\mathrm{batch}$ Bellman.
-\item[(P2)] \emph{Within-batch-1 observation likelihood} $p(\by_k \mid \bx, \bs_k;\, \bc)$.
-\item[(P3)] \emph{Within-batch-1 belief update} $T(\bb_{k-1}, \bs_k, \by_k;\, \bc)$, which
-      shapes how $\bb_{K_\mathrm{batch}}$ depends on the trajectory.
-\item[(P4)] \emph{Batch-2 Bellman value at fixed starting belief}
-      $V^{[2]}(\cdot;\, \bc)$, which depends on $\bc$ through batch-2's likelihood and
+\item[(P1)] \emph{Segment-1 policy actions} $\bs_k(\tau_{<k}, \bc)$ via the argmax of the local
+      $K_\mathrm{segment}$ Bellman.
+\item[(P2)] \emph{Within-segment-1 observation likelihood} $p(\by_k \mid \bx, \bs_k;\, \bc)$.
+\item[(P3)] \emph{Within-segment-1 belief update} $T(\bb_{k-1}, \bs_k, \by_k;\, \bc)$, which
+      shapes how $\bb_{K_\mathrm{segment}}$ depends on the trajectory.
+\item[(P4)] \emph{Segment-2 Bellman value at fixed starting belief}
+      $V^{[2]}(\cdot;\, \bc)$, which depends on $\bc$ through segment-2's likelihood and
       belief updates.
-\item[(P5)] \emph{Starting belief input to batch-2}, $\bb_{K_\mathrm{batch}}(\bx, \by_{1:K_\mathrm{batch}}; \bc)$.
+\item[(P5)] \emph{Starting belief input to segment-2}, $\bb_{K_\mathrm{segment}}(\bx, \by_{1:K_\mathrm{segment}}; \bc)$.
       Evaluating $V^{[2]}$ at a starting belief that itself depends on $\bc$ pulls a chain
       of (P3) sensitivities in.
 \end{enumerate}
@@ -309,12 +309,12 @@ We now show that (P1) contributes zero to the gradient under hard argmax, while
 score-function term (carrying P2).
 
 \paragraph{Hard-argmax policy contributes zero.}
-The batch-1 policy is $\bs_k(\bb_{k-1}; \bc) = \argmax_{\bs} Q^{[1]}_k(\bb_{k-1}, \bs;\, \bc)$.
+The segment-1 policy is $\bs_k(\bb_{k-1}; \bc) = \argmax_{\bs} Q^{[1]}_k(\bb_{k-1}, \bs;\, \bc)$.
 For an interior strict maximizer, the argmax is locally constant in $\bc$:
 $\partial \bs_k / \partial \bc = 0$ almost everywhere in $\bc$.  Hence path (P1)
 contributes a measure-zero set of jump points, which integrate to zero against
 $\bc$-perturbations.  Throughout, we therefore treat the realized actions
-$\bs^{(m)}_{1:K_\mathrm{batch}}$ on each sampled trajectory as
+$\bs^{(m)}_{1:K_\mathrm{segment}}$ on each sampled trajectory as
 $\bc$-frozen at their recorded values.  This is the same locally-constant-argmax
 assumption used by the sharp-max envelope theorem of the joint-DP framework, applied here
 to the policy choices.
@@ -322,8 +322,8 @@ to the policy choices.
 \subsection{The REINFORCE / pathwise decomposition}
 \label{sec:reinforce}
 
-Let $F(\tau;\, \bc) := V^{[2]}(\bb_{K_\mathrm{batch}}(\tau, \bc);\, \bc)$.  Then
-$V^\mathrm{batch}(p_0;\, \bc) = \E_{\tau \sim P(\cdot;\, \bc)}[F(\tau;\, \bc)]$.  By the
+Let $F(\tau;\, \bc) := V^{[2]}(\bb_{K_\mathrm{segment}}(\tau, \bc);\, \bc)$.  Then
+$V^\mathrm{segment}(p_0;\, \bc) = \E_{\tau \sim P(\cdot;\, \bc)}[F(\tau;\, \bc)]$.  By the
 log-derivative identity ($\nabla_{\bc} P = P \cdot \nabla_{\bc} \log P$),
 \begin{equation}
 \nabla_{\bc}\, \E_{\tau \sim P(\cdot;\, \bc)}\!\bigl[F(\tau;\, \bc)\bigr]
@@ -341,13 +341,13 @@ unbiased estimator.
 \subsection{Pathwise gradient \texorpdfstring{$\nabla_{\bc} F(\tau;\, \bc)$}{nabla\_c F}}
 \label{sec:pathwise}
 
-By chain rule on $F = V^{[2]}\bigl(\bb_{K_\mathrm{batch}}(\tau, \bc);\, \bc\bigr)$,
+By chain rule on $F = V^{[2]}\bigl(\bb_{K_\mathrm{segment}}(\tau, \bc);\, \bc\bigr)$,
 \begin{equation}
 \nabla_{\bc} F(\tau;\, \bc)
 \;=\;
-\underbrace{\Bigl[\,\nabla_{\bb} V^{[2]}\!\bigl(\bb_{K_\mathrm{batch}};\, \bc\bigr)\,\Bigr]^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{batch}}(\tau, \bc)}_{\text{(A): input-belief sensitivity}}
+\underbrace{\Bigl[\,\nabla_{\bb} V^{[2]}\!\bigl(\bb_{K_\mathrm{segment}};\, \bc\bigr)\,\Bigr]^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{segment}}(\tau, \bc)}_{\text{(A): input-belief sensitivity}}
 \;+\;
-\underbrace{\biggl.\frac{\partial V^{[2]}\bigl(\bb;\, \bc\bigr)}{\partial \bc}\biggr|_{\bb \text{ held fixed at } \bb_{K_\mathrm{batch}}}}_{\text{(B): standard joint-DP gradient}}.
+\underbrace{\biggl.\frac{\partial V^{[2]}\bigl(\bb;\, \bc\bigr)}{\partial \bc}\biggr|_{\bb \text{ held fixed at } \bb_{K_\mathrm{segment}}}}_{\text{(B): standard joint-DP gradient}}.
 \label{eq:pathwise}
 \end{equation}
 Each term has a concrete computation; we unfold them in turn.
@@ -355,27 +355,27 @@ Each term has a concrete computation; we unfold them in turn.
 \paragraph{Term (B): standard joint-DP gradient at fixed starting belief.}
 
 This is the existing joint-DP gradient of the paper's main framework, applied to
-$V^{[2]}$.  Specifically, holding the starting belief fixed at $\bb_{K_\mathrm{batch}}^{(m)}$
-on the sampled trajectory, we run forward the $K_\mathrm{batch}$ Bellman recursion at
-parameter $\bc$ to obtain the policy memo for batch~2.  Then we apply the sharp-max
-envelope theorem: freeze the recorded action argmaxes throughout the batch-2 subtree, and
+$V^{[2]}$.  Specifically, holding the starting belief fixed at $\bb_{K_\mathrm{segment}}^{(m)}$
+on the sampled trajectory, we run forward the $K_\mathrm{segment}$ Bellman recursion at
+parameter $\bc$ to obtain the policy memo for segment~2.  Then we apply the sharp-max
+envelope theorem: freeze the recorded action argmaxes throughout the segment-2 subtree, and
 compute reverse-mode automatic differentiation on the resulting argmax-free expression for
-$V^{[2]}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)$.  The result is exact for the batch-2
+$V^{[2]}(\bb_{K_\mathrm{segment}}^{(m)};\, \bc)$.  The result is exact for the segment-2
 subproblem.
 
-In the count-tuple-keyed setting, term (B) is computable in time $O(N_\mathrm{batch-2-memo} \cdot \mathrm{cost}(p, T))$, comparable to one $K_\mathrm{batch}$ Bellman solve.
+In the count-tuple-keyed setting, term (B) is computable in time $O(N_\mathrm{segment-2-memo} \cdot \mathrm{cost}(p, T))$, comparable to one $K_\mathrm{segment}$ Bellman solve.
 
 \paragraph{Term (A): input-belief sensitivity through belief-update chain.}
 
 This is two distinct factors:
 \begin{itemize}[nosep, leftmargin=2em]
-\item $\nabla_{\bb} V^{[2]}(\bb;\, \bc)$: the gradient of the batch-2 Bellman value with
-      respect to the \emph{input belief} $\bb$, evaluated at $\bb = \bb_{K_\mathrm{batch}}^{(m)}$.
-\item $\nabla_{\bc} \bb_{K_\mathrm{batch}}(\tau, \bc)$: the sensitivity of the batch-1
-      terminal belief to $\bc$ along the realized batch-1 trajectory.
+\item $\nabla_{\bb} V^{[2]}(\bb;\, \bc)$: the gradient of the segment-2 Bellman value with
+      respect to the \emph{input belief} $\bb$, evaluated at $\bb = \bb_{K_\mathrm{segment}}^{(m)}$.
+\item $\nabla_{\bc} \bb_{K_\mathrm{segment}}(\tau, \bc)$: the sensitivity of the segment-1
+      terminal belief to $\bc$ along the realized segment-1 trajectory.
 \end{itemize}
 
-\textbf{Computing $\nabla_{\bb} V^{[2]}$.}  The batch-2 Bellman recursion at starting
+\textbf{Computing $\nabla_{\bb} V^{[2]}$.}  The segment-2 Bellman recursion at starting
 belief $\bb$ contains $\bb$ in two places: (i) directly, as the argument of the value
 function; (ii) through the marginal observation probability $\Pr(\by \mid \bb, \bs;\, \bc) =
 \sum_{\bx} \bb(\bx)\, p(\by \mid \bx, \bs;\, \bc)$, which appears in every Bellman backup
@@ -384,10 +384,10 @@ $\bb$ is a $K_\Phi$-dimensional vector; $\nabla_{\bb} V^{[2]}$ is a $K_\Phi$-vec
 computable by reverse-mode AD through the argmax-frozen Bellman recursion, treating $\bb$
 as the differentiation target instead of $\bc$.
 
-\textbf{Computing $\nabla_{\bc} \bb_{K_\mathrm{batch}}$.}  The belief at the end of batch~1
+\textbf{Computing $\nabla_{\bc} \bb_{K_\mathrm{segment}}$.}  The belief at the end of segment~1
 is the recursion
 \[
-\bb_k = T(\bb_{k-1}, \bs_k, \by_k;\, \bc), \qquad k = 1, \ldots, K_\mathrm{batch},
+\bb_k = T(\bb_{k-1}, \bs_k, \by_k;\, \bc), \qquad k = 1, \ldots, K_\mathrm{segment},
 \]
 with $\bs_k$ and $\by_k$ frozen at their recorded values.  Differentiating w.r.t. $\bc$
 with frozen $(\bs_k, \by_k)$:
@@ -403,15 +403,15 @@ with frozen $(\bs_k, \by_k)$:
 \end{equation}
 unfolding from $\partial \bb_0 / \partial \bc = 0$ (the prior is $\bc$-independent).
 This is a standard chain-rule recursion through the belief-update operator and is
-computable by one reverse-mode AD pass over the $K_\mathrm{batch}$-step chain.
+computable by one reverse-mode AD pass over the $K_\mathrm{segment}$-step chain.
 
 \textbf{Combining (A1) and (A2).}  Term~(A) of Equation~\eqref{eq:pathwise} is
 \[
-\sum_{i=1}^{K_\Phi} \frac{\partial V^{[2]}}{\partial \bb_{K_\mathrm{batch}, i}}\bigl(\bb_{K_\mathrm{batch}}; \bc\bigr) \cdot \frac{\partial \bb_{K_\mathrm{batch}, i}}{\partial \bc}.
+\sum_{i=1}^{K_\Phi} \frac{\partial V^{[2]}}{\partial \bb_{K_\mathrm{segment}, i}}\bigl(\bb_{K_\mathrm{segment}}; \bc\bigr) \cdot \frac{\partial \bb_{K_\mathrm{segment}, i}}{\partial \bc}.
 \]
 Both factors are vectors in $\R^{K_\Phi}$; the inner product collapses them into a scalar
 gradient w.r.t. $\bc$.  In practice the two reverse-mode AD passes are combined into one,
-treating the entire pipeline (batch-1 belief updates feeding batch-2 Bellman value) as a
+treating the entire pipeline (segment-1 belief updates feeding segment-2 Bellman value) as a
 single computational graph with $\bc$ as the differentiation target.
 
 \subsection{Score-function gradient \texorpdfstring{$\nabla_{\bc} \log P(\tau;\, \bc)$}{nabla\_c log P}}
@@ -423,20 +423,20 @@ From Equation~\eqref{eq:trajdensity},
 \;=\;
 \log p_0(\bx)
 \;+\;
-\sum_{k=1}^{K_\mathrm{batch}} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr).
+\sum_{k=1}^{K_\mathrm{segment}} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr).
 \]
 The prior $p_0(\bx)$ is $\bc$-independent.  Differentiating:
 \begin{equation}
 \nabla_{\bc} \log P(\tau;\, \bc)
 \;=\;
-\sum_{k=1}^{K_\mathrm{batch}} \nabla_{\bc} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr),
+\sum_{k=1}^{K_\mathrm{segment}} \nabla_{\bc} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr),
 \label{eq:scorefn}
 \end{equation}
 with $\bs_k$ frozen by the hard-argmax property of \S\ref{sec:c_dependences}.  Each summand
 is the per-shot likelihood score, computable by reverse-mode AD on the closed-form
 likelihood $p(\by \mid \bx, \bs;\, \bc)$.  Note that this is a vector in $\R^{d_c}$ (one
 component per hardware coordinate); the score-function gradient is a sum of such vectors
-across batch-1 shots.
+across segment-1 shots.
 
 \subsection{The full per-trajectory gradient estimator}
 \label{sec:full_estimator}
@@ -446,33 +446,33 @@ per-trajectory gradient estimator is
 \begin{equation}
 g^{(m)}
 \;=\;
-\underbrace{\Bigl[\nabla_{\bb} V^{[2]}\bigr|_{\bb_{K_\mathrm{batch}}^{(m)}}\!\Bigr]^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{batch}}^{(m)}}_{\text{Term A: belief-input × belief chain}}
+\underbrace{\Bigl[\nabla_{\bb} V^{[2]}\bigr|_{\bb_{K_\mathrm{segment}}^{(m)}}\!\Bigr]^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{segment}}^{(m)}}_{\text{Term A: belief-input × belief chain}}
 \;+\;
-\underbrace{\biggl.\frac{\partial V^{[2]}\bigl(\bb;\, \bc\bigr)}{\partial \bc}\biggr|_{\bb = \bb_{K_\mathrm{batch}}^{(m)}}}_{\text{Term B: joint-DP gradient at fixed input}}
+\underbrace{\biggl.\frac{\partial V^{[2]}\bigl(\bb;\, \bc\bigr)}{\partial \bc}\biggr|_{\bb = \bb_{K_\mathrm{segment}}^{(m)}}}_{\text{Term B: joint-DP gradient at fixed input}}
 \;+\;
-\underbrace{V^{[2]}\bigl(\bb_{K_\mathrm{batch}}^{(m)};\, \bc\bigr) \cdot \sum_{k=1}^{K_\mathrm{batch}} \nabla_{\bc} \log p\bigl(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)};\, \bc\bigr)}_{\text{Term C: score-function correction}}.
+\underbrace{V^{[2]}\bigl(\bb_{K_\mathrm{segment}}^{(m)};\, \bc\bigr) \cdot \sum_{k=1}^{K_\mathrm{segment}} \nabla_{\bc} \log p\bigl(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)};\, \bc\bigr)}_{\text{Term C: score-function correction}}.
 \label{eq:gm}
 \end{equation}
 Aggregating across $M$ samples,
 \begin{equation}
-\widehat{\nabla}_{\bc}\, V^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\widehat{\nabla}_{\bc}\, V^\mathrm{segment}(p_0;\, \bc; \mathcal{M})
 \;=\;
 \frac{1}{M} \sum_{m=1}^{M} g^{(m)}.
 \label{eq:full_estimator}
 \end{equation}
-This estimator is unbiased for $\nabla_{\bc}\, V^\mathrm{batch}(p_0;\, \bc)$ by direct
+This estimator is unbiased for $\nabla_{\bc}\, V^\mathrm{segment}(p_0;\, \bc)$ by direct
 substitution of \eqref{eq:reinforce} and the law of large numbers.
 
 \paragraph{Roles of the three terms.}  Term~B is what one would write down naively if the
 trajectory were $\bc$-independent: the standard joint-DP gradient evaluated at the sampled
-batch-2 starting belief.  Term~A corrects for the fact that $\bb_{K_\mathrm{batch}}$ itself
+segment-2 starting belief.  Term~A corrects for the fact that $\bb_{K_\mathrm{segment}}$ itself
 depends on $\bc$ through the chain of belief updates that built it.  Term~C corrects for
 the fact that the trajectory's sampling distribution depends on $\bc$ through the
 likelihood; without it the estimator is biased toward the trajectories that current $\bc$
 makes likely.
 
 \paragraph{Failure modes if any term is dropped.}  Dropping Term~A produces a bias
-proportional to the rate at which $\bb_{K_\mathrm{batch}}$ shifts under $\bc$, scaled by
+proportional to the rate at which $\bb_{K_\mathrm{segment}}$ shifts under $\bc$, scaled by
 the slope of $V^{[2]}$ in $\bb$.  Dropping Term~C produces a bias proportional to the
 score-function-times-value covariance.  Both are problem-dependent; in cases where the
 likelihood depends on $\bc$ only weakly across the prior support, Terms~A and~C can be
@@ -488,7 +488,7 @@ multiplying by the score:
 \begin{equation}
 g^{(m)}_{\mathrm{reduced}}
 \;=\;
-\text{(A)} + \text{(B)} + \bigl[V^{[2]}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc) - B(\bc)\bigr] \cdot \sum_k \nabla_{\bc} \log p(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)}; \bc).
+\text{(A)} + \text{(B)} + \bigl[V^{[2]}(\bb_{K_\mathrm{segment}}^{(m)};\, \bc) - B(\bc)\bigr] \cdot \sum_k \nabla_{\bc} \log p(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)}; \bc).
 \label{eq:gm_baseline}
 \end{equation}
 The estimator remains unbiased for any $B(\bc)$ that does not depend on $\tau^{(m)}$,
@@ -496,39 +496,39 @@ because $\E_{\tau}[\nabla_{\bc} \log P(\tau;\, \bc)] = 0$ identically.
 
 \paragraph{Choice of baseline.}  Two standard choices:
 \begin{itemize}[nosep, leftmargin=2em]
-\item \emph{Empirical mean:} $B(\bc) = \frac{1}{M} \sum_{m'=1}^M V^{[2]}(\bb_{K_\mathrm{batch}}^{(m')};\, \bc)$.
+\item \emph{Empirical mean:} $B(\bc) = \frac{1}{M} \sum_{m'=1}^M V^{[2]}(\bb_{K_\mathrm{segment}}^{(m')};\, \bc)$.
       Cheap (free, given the values are already computed) but biased if used naively
       (because $B$ depends on the same samples whose scores it modifies).  The standard
-      remedy is leave-one-out: $B^{(m)}(\bc) = \frac{1}{M-1} \sum_{m' \ne m} V^{[2]}(\bb_{K_\mathrm{batch}}^{(m')};\, \bc)$.
+      remedy is leave-one-out: $B^{(m)}(\bc) = \frac{1}{M-1} \sum_{m' \ne m} V^{[2]}(\bb_{K_\mathrm{segment}}^{(m')};\, \bc)$.
 \item \emph{Local Bellman value:} $B(\bc) = V^{[1]}_{\mathrm{local}}(p_0;\, \bc)$, the
-      $K_\mathrm{batch}$ Bellman value of batch~1 at $p_0$ with local terminal $\Phi_0$.
-      This is computable for free during the batch-1 Bellman solve and is the optimal
+      $K_\mathrm{segment}$ Bellman value of segment~1 at $p_0$ with local terminal $\Phi_0$.
+      This is computable for free during the segment-1 Bellman solve and is the optimal
       baseline in the sense of minimum variance among $\bc$-only constants when the local
-      terminal of batch~1 matches the global terminal of $V^{[2]}$.
+      terminal of segment~1 matches the global terminal of $V^{[2]}$.
 \end{itemize}
 
 The local-Bellman baseline is the natural ``advantage-function'' choice and we recommend
 it when the local and global terminals coincide (e.g., $\Phi_0 = -\mathrm{Var}(\bx \mid \bb)$
-applied at end of every batch including the final one).
+applied at end of every segment including the final one).
 
-\subsection{Generalization to \texorpdfstring{$n > 2$}{n > 2} batches}
-\label{sec:nbatch_general}
+\subsection{Generalization to \texorpdfstring{$n > 2$}{n > 2} segments}
+\label{sec:nseg_general}
 
 We now extend the derivation of \S\ref{sec:n2_setup}--\ref{sec:full_estimator} to general
-$n$ batches.  The structure mirrors the two-batch case exactly; the additional content is
-the per-batch decomposition of the score-function term and the corresponding advantage-form
+$n$ segments.  The structure mirrors the two-segment case exactly; the additional content is
+the per-segment decomposition of the score-function term and the corresponding advantage-form
 variance reduction.
 
-\subsubsection{Trajectory factorization across batches}
-\label{sec:nbatch_factorization}
+\subsubsection{Trajectory factorization across segments}
+\label{sec:nseg_factorization}
 
-For $n$ batches with $K_\mathrm{total} = n K_\mathrm{batch}$, denote the per-batch
+For $n$ segments with $K_\mathrm{total} = n K_\mathrm{segment}$, denote the per-segment
 sub-trajectories
 \[
-\tau_j := \bigl(\by_{(j-1)K_\mathrm{batch} + 1}, \ldots, \by_{j K_\mathrm{batch}}\bigr), \qquad j = 1, \ldots, n,
+\tau_j := \bigl(\by_{(j-1)K_\mathrm{segment} + 1}, \ldots, \by_{j K_\mathrm{segment}}\bigr), \qquad j = 1, \ldots, n,
 \]
 and the full trajectory $\tau := (\bx, \tau_1, \ldots, \tau_n)$.  Let
-$\bb^{\mathrm{bdy}}_j := \bb_{j K_\mathrm{batch}}$ denote the belief at the end of batch
+$\bb^{\mathrm{bdy}}_j := \bb_{j K_\mathrm{segment}}$ denote the belief at the end of segment
 $j$ (so $\bb^{\mathrm{bdy}}_0 = p_0$ and $\bb^{\mathrm{bdy}}_n = \bb_{K_\mathrm{total}}$).
 
 The trajectory density factorizes as a single product over all $K_\mathrm{total}$ shots,
@@ -538,38 +538,38 @@ P(\tau;\, \bc)
 p_0(\bx) \cdot \prod_{k=1}^{K_\mathrm{total}} p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr),
 \label{eq:Pfactor_full}
 \end{equation}
-which by grouping shots into batches becomes
+which by grouping shots into segments becomes
 \begin{equation}
 P(\tau;\, \bc)
 \;=\;
 p_0(\bx) \cdot \prod_{j=1}^{n} P_j\bigl(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc\bigr),
 \quad \text{where} \quad
-P_j(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc) = \prod_{k \in \text{batch } j} p(\by_k \mid \bx, \bs_k;\, \bc).
-\label{eq:Pfactor_perbatch}
+P_j(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc) = \prod_{k \in \text{segment } j} p(\by_k \mid \bx, \bs_k;\, \bc).
+\label{eq:Pfactor_perseg}
 \end{equation}
-The per-batch density $P_j$ depends on $\bc$ through both the within-batch likelihoods and
-the local Bellman policy that selects $\bs_k$ for $k \in$~batch~$j$.  As before, the policy
+The per-segment density $P_j$ depends on $\bc$ through both the within-segment likelihoods and
+the local Bellman policy that selects $\bs_k$ for $k \in$~segment~$j$.  As before, the policy
 contribution vanishes under hard argmax, so $\bs_k$ values are frozen at recorded argmaxes.
 
 \subsubsection{REINFORCE applied to the full trajectory}
-\label{sec:nbatch_reinforce}
+\label{sec:nseg_reinforce}
 
 Because the full trajectory factorization \eqref{eq:Pfactor_full} contains all $K_\mathrm{total}$
 shots in one product, the REINFORCE identity \eqref{eq:reinforce} applies to the full
 trajectory directly.  With $F(\tau;\, \bc) := \Phi_0(\bb_{K_\mathrm{total}}(\tau, \bc);\, \bc)$,
 \begin{equation}
-\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)
+\nabla_{\bc} V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
 \E_{\tau \sim P(\cdot;\, \bc)}\!\bigl[\,\nabla_{\bc} F(\tau;\, \bc)\,\bigr]
 \;+\;
 \E_{\tau \sim P(\cdot;\, \bc)}\!\bigl[\,F(\tau;\, \bc) \cdot \nabla_{\bc} \log P(\tau;\, \bc)\,\bigr].
-\label{eq:nbatch_reinforce}
+\label{eq:nseg_reinforce}
 \end{equation}
-Both terms unfold across all $K_\mathrm{total}$ steps; the per-batch decomposition arises
-naturally because the underlying recursion has batch boundaries built into the policy.
+Both terms unfold across all $K_\mathrm{total}$ steps; the per-segment decomposition arises
+naturally because the underlying recursion has segment boundaries built into the policy.
 
 \subsubsection{Pathwise gradient across all \texorpdfstring{$K_\mathrm{total}$}{K\_total} steps}
-\label{sec:nbatch_pathwise}
+\label{sec:nseg_pathwise}
 
 The terminal reward $\Phi_0(\bb_{K_\mathrm{total}}(\tau, \bc);\, \bc)$ depends on $\bc$
 through (i) any direct $\bc$-dependence in the functional form of $\Phi_0$ and (ii) the
@@ -580,7 +580,7 @@ chain of $K_\mathrm{total}$ belief updates.  By chain rule,
 \biggl.\frac{\partial \Phi_0(\bb;\, \bc)}{\partial \bc}\biggr|_{\bb = \bb_{K_\mathrm{total}}}
 \;+\;
 \Bigl[\nabla_{\bb} \Phi_0(\bb_{K_\mathrm{total}};\, \bc)\Bigr]^\top \cdot \nabla_{\bc}\, \bb_{K_\mathrm{total}}(\tau, \bc),
-\label{eq:nbatch_pathwise}
+\label{eq:nseg_pathwise}
 \end{equation}
 with the belief-chain derivative
 \begin{equation}
@@ -592,26 +592,26 @@ with the belief-chain derivative
 \cdot
 \frac{\partial \bb_{k-1}}{\partial \bc},
 \qquad k = 1, \ldots, K_\mathrm{total},
-\label{eq:nbatch_belief_chain}
+\label{eq:nseg_belief_chain}
 \end{equation}
-unfolding from $\partial \bb_0 / \partial \bc = 0$.  Equation~\eqref{eq:nbatch_belief_chain}
+unfolding from $\partial \bb_0 / \partial \bc = 0$.  Equation~\eqref{eq:nseg_belief_chain}
 is the same belief-chain recursion as Equation~\eqref{eq:belief_chain} but extended over all
-$K_\mathrm{total}$ steps, not just the first $K_\mathrm{batch}$.  In implementation it is
+$K_\mathrm{total}$ steps, not just the first $K_\mathrm{segment}$.  In implementation it is
 one reverse-mode AD pass over the full trajectory's belief-update chain.  Note that
-the batch boundaries do not appear specially in this term: the belief update is the same
-operator at every step, regardless of which batch the step belongs to.
+the segment boundaries do not appear specially in this term: the belief update is the same
+operator at every step, regardless of which segment the step belongs to.
 
-\paragraph{Comparison with the two-batch pathwise term.}  In the two-batch derivation
+\paragraph{Comparison with the two-segment pathwise term.}  In the two-segment derivation
 \eqref{eq:pathwise} the pathwise term split into an "input belief" piece~(A) and a
-"fixed-input batch-2 Bellman gradient" piece~(B).  Here we have folded both pieces into
-a single chain rule expression \eqref{eq:nbatch_pathwise}.  The split is equivalent: the
-"fixed-input batch-2 Bellman gradient" of the two-batch case corresponds to differentiating
-the second batch's belief-update chain with the second batch's input frozen, while the
-"input belief sensitivity" corresponds to differentiating the first batch's chain.  Both
+"fixed-input segment-2 Bellman gradient" piece~(B).  Here we have folded both pieces into
+a single chain rule expression \eqref{eq:nseg_pathwise}.  The split is equivalent: the
+"fixed-input segment-2 Bellman gradient" of the two-segment case corresponds to differentiating
+the second segment's belief-update chain with the second segment's input frozen, while the
+"input belief sensitivity" corresponds to differentiating the first segment's chain.  Both
 flatten into the same total chain over $K_\mathrm{total}$ steps.
 
-\subsubsection{Per-batch decomposition of the score-function term}
-\label{sec:nbatch_score}
+\subsubsection{Per-segment decomposition of the score-function term}
+\label{sec:nseg_score}
 
 The full score function unfolds across all shots:
 \begin{equation}
@@ -619,27 +619,27 @@ The full score function unfolds across all shots:
 \;=\;
 \sum_{k=1}^{K_\mathrm{total}} \nabla_{\bc} \log p\bigl(\by_k \mid \bx, \bs_k;\, \bc\bigr)
 \;=\;
-\sum_{j=1}^{n} \underbrace{\nabla_{\bc} \log P_j\bigl(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc\bigr)}_{\sum_{k \in \text{batch } j} \nabla_{\bc} \log p(\by_k \mid \bx, \bs_k;\, \bc)}.
-\label{eq:nbatch_score_decomp}
+\sum_{j=1}^{n} \underbrace{\nabla_{\bc} \log P_j\bigl(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc\bigr)}_{\sum_{k \in \text{segment } j} \nabla_{\bc} \log p(\by_k \mid \bx, \bs_k;\, \bc)}.
+\label{eq:nseg_score_decomp}
 \end{equation}
-The grouping into $n$ per-batch contributions is purely notational at this stage — the
-per-batch sums are just additive.  But it becomes load-bearing in the next step, where
-each per-batch term gets multiplied by the residual remaining-horizon value from that
-batch onwards rather than by the global terminal.
+The grouping into $n$ per-segment contributions is purely notational at this stage — the
+per-segment sums are just additive.  But it becomes load-bearing in the next step, where
+each per-segment term gets multiplied by the residual remaining-horizon value from that
+segment onwards rather than by the global terminal.
 
-\subsubsection{Equivalent per-batch score-function form (for variance reduction)}
-\label{sec:nbatch_perbatch}
+\subsubsection{Equivalent per-segment score-function form (for variance reduction)}
+\label{sec:nseg_perseg}
 
-The "raw" REINFORCE gradient \eqref{eq:nbatch_reinforce} multiplies the score function by
+The "raw" REINFORCE gradient \eqref{eq:nseg_reinforce} multiplies the score function by
 the global terminal $F(\tau;\, \bc) = \Phi_0(\bb_{K_\mathrm{total}};\, \bc)$.  By the same
 identity that proves $\E_\tau[\nabla_{\bc} \log P(\tau;\, \bc)] = 0$ for an arbitrary
 constant baseline, we can substitute any \emph{$\bc$-only} or \emph{causally-prior}
-quantity for the score-function multiplier within each batch's term, without introducing
+quantity for the score-function multiplier within each segment's term, without introducing
 bias.  Specifically:
-\begin{lemma}[Per-batch score-function multiplier substitution]
-\label{lem:perbatch_substitution}
+\begin{lemma}[Per-segment score-function multiplier substitution]
+\label{lem:perseg_substitution}
 For each $j = 1, \ldots, n$, let $W_j(\bc, \tau_{<j})$ be any function depending on $\bc$
-and on the trajectory \emph{prior} to batch $j$ (i.e., on $\bx$ and on
+and on the trajectory \emph{prior} to segment $j$ (i.e., on $\bx$ and on
 $\tau_1, \ldots, \tau_{j-1}$).  Then
 \begin{equation}
 \E_{\tau} \bigl[\,W_j(\bc, \tau_{<j}) \cdot \nabla_{\bc} \log P_j(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc)\,\bigr] \;=\; 0.
@@ -657,26 +657,26 @@ parametric density.  $\square$
 
 \medskip
 
-This means we can replace the score-function multiplier inside batch $j$'s term with the
+This means we can replace the score-function multiplier inside segment $j$'s term with the
 \emph{remaining-horizon value} $V_{\mathrm{global}}^{(j+1)}(\bb^{\mathrm{bdy}}_j;\, \bc)$
 plus or minus any $\bc$-only quantity:
 \begin{equation}
 \E_\tau\bigl[F \cdot \nabla_{\bc} \log P_j\bigr]
 \;=\;
 \E_\tau\bigl[V_{\mathrm{global}}^{(j+1)}(\bb^{\mathrm{bdy}}_j;\, \bc) \cdot \nabla_{\bc} \log P_j\bigr],
-\label{eq:perbatch_value_substitution}
+\label{eq:perseg_value_substitution}
 \end{equation}
 because the difference $F - V_{\mathrm{global}}^{(j+1)}(\bb^{\mathrm{bdy}}_j;\, \bc)$ has
 zero conditional expectation given $\tau_{<j+1}$ (it is exactly the residual stochasticity
-in batches $j+1, \ldots, n$ given the boundary belief), and that residual is independent of
-batch $j$'s score function only when integrated against batch $j$'s score (which is what
-Lemma~\ref{lem:perbatch_substitution} certifies).
+in segments $j+1, \ldots, n$ given the boundary belief), and that residual is independent of
+segment $j$'s score function only when integrated against segment $j$'s score (which is what
+Lemma~\ref{lem:perseg_substitution} certifies).
 
-Combining \eqref{eq:nbatch_reinforce}, \eqref{eq:nbatch_score_decomp}, and
-\eqref{eq:perbatch_value_substitution} yields the \emph{per-batch} REINFORCE form:
+Combining \eqref{eq:nseg_reinforce}, \eqref{eq:nseg_score_decomp}, and
+\eqref{eq:perseg_value_substitution} yields the \emph{per-segment} REINFORCE form:
 \begin{equation}
 \boxed{\;
-\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)
+\nabla_{\bc} V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
 \E_\tau\!\biggl[\,
 \nabla_{\bc} F(\tau;\, \bc)
@@ -684,163 +684,163 @@ Combining \eqref{eq:nbatch_reinforce}, \eqref{eq:nbatch_score_decomp}, and
 \sum_{j=1}^{n} V_{\mathrm{global}}^{(j+1)}\!\bigl(\bb^{\mathrm{bdy}}_j;\, \bc\bigr) \cdot \nabla_{\bc} \log P_j(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc)
 \,\biggr].
 \;}
-\label{eq:nbatch_main}
+\label{eq:nseg_main}
 \end{equation}
 Here $V_{\mathrm{global}}^{(n+1)} := \Phi_0(\bb;\, \bc)$ by convention (so the $j = n$ term
 collapses to the standard score function multiplied by the realized terminal).
 
-\subsubsection{Variance reduction with per-batch advantage baselines}
-\label{sec:nbatch_advantage}
+\subsubsection{Variance reduction with per-segment advantage baselines}
+\label{sec:nseg_advantage}
 
 By the same lemma, we can subtract any $\bc$-only or causally-prior quantity from
 $V_{\mathrm{global}}^{(j+1)}(\bb^{\mathrm{bdy}}_j;\, \bc)$ inside the $j$-th term without
-introducing bias.  Define the per-batch advantage
+introducing bias.  Define the per-segment advantage
 \begin{equation}
 A_j(\bb^{\mathrm{bdy}}_j;\, \bc) \;:=\; V_{\mathrm{global}}^{(j+1)}\!\bigl(\bb^{\mathrm{bdy}}_j;\, \bc\bigr) - V_{\mathrm{global}}^{(j)}\!\bigl(\bb^{\mathrm{bdy}}_{j-1};\, \bc\bigr).
 \label{eq:advantage}
 \end{equation}
-This is the \emph{realized-minus-expected} value of batch $j$: it measures how much
-unexpectedly more (or less) value batch $j$ delivered relative to what was anticipated
-from $\bb^{\mathrm{bdy}}_{j-1}$ at the start of the batch.  By
-Lemma~\ref{lem:perbatch_substitution}, $\E[V_{\mathrm{global}}^{(j)}(\bb^{\mathrm{bdy}}_{j-1};\, \bc) \cdot \nabla_{\bc} \log P_j] = 0$, so substituting $V_{\mathrm{global}}^{(j+1)}$ with $A_j$ leaves the gradient unbiased:
+This is the \emph{realized-minus-expected} value of segment $j$: it measures how much
+unexpectedly more (or less) value segment $j$ delivered relative to what was anticipated
+from $\bb^{\mathrm{bdy}}_{j-1}$ at the start of the segment.  By
+Lemma~\ref{lem:perseg_substitution}, $\E[V_{\mathrm{global}}^{(j)}(\bb^{\mathrm{bdy}}_{j-1};\, \bc) \cdot \nabla_{\bc} \log P_j] = 0$, so substituting $V_{\mathrm{global}}^{(j+1)}$ with $A_j$ leaves the gradient unbiased:
 \begin{equation}
-\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)
+\nabla_{\bc} V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
 \E_\tau\!\Bigl[\,
 \nabla_{\bc} F(\tau;\, \bc)
 \;+\;
 \sum_{j=1}^{n} A_j(\bb^{\mathrm{bdy}}_j;\, \bc) \cdot \nabla_{\bc} \log P_j(\tau_j \mid \bx, \bb^{\mathrm{bdy}}_{j-1};\, \bc)
 \,\Bigr].
-\label{eq:nbatch_advantage}
+\label{eq:nseg_advantage}
 \end{equation}
-Equation~\eqref{eq:nbatch_advantage} is the actor-critic / advantage form.  Variance is
-typically much smaller than \eqref{eq:nbatch_main} because $A_j$ has zero conditional mean
+Equation~\eqref{eq:nseg_advantage} is the actor-critic / advantage form.  Variance is
+typically much smaller than \eqref{eq:nseg_main} because $A_j$ has zero conditional mean
 (by definition), while $V_{\mathrm{global}}^{(j+1)}$ has the full per-trajectory variance.
 
 \paragraph{Estimating $V_{\mathrm{global}}^{(j)}$.}  The advantage form requires
 $V_{\mathrm{global}}^{(j)}$ at the boundary beliefs, but we do not have a closed form for
-these in the general SBDP setting.  Three practical estimators:
+these in the general SSDP setting.  Three practical estimators:
 \begin{itemize}[nosep, leftmargin=2em]
 \item \emph{Empirical mean over samples}: $\widehat{V}_{\mathrm{global}}^{(j)}(\bb;\, \bc) \approx
   \frac{1}{M} \sum_{m'=1}^{M} F(\tau^{(m')};\, \bc)$, treating samples as i.i.d. from the trajectory
   distribution.  Cheap; introduces a small leave-one-out bias unless one excludes the current
   sample's contribution.
 \item \emph{Local Bellman value}: $\widehat{V}_{\mathrm{global}}^{(j)}(\bb;\, \bc) \approx
-  V^{[j]}_\mathrm{local}(\bb;\, \bc)$, the standard $K_\mathrm{batch}$ Bellman value with terminal
-  $\Phi_0$ at end of batch $j$.  Free during the local Bellman solve.  Optimal as a baseline
+  V^{[j]}_\mathrm{local}(\bb;\, \bc)$, the standard $K_\mathrm{segment}$ Bellman value with terminal
+  $\Phi_0$ at end of segment $j$.  Free during the local Bellman solve.  Optimal as a baseline
   when local terminal coincides with global terminal.
-\item \emph{Bootstrap from sampled trajectories}: simulate one further batch under the current
+\item \emph{Bootstrap from sampled trajectories}: simulate one further segment under the current
   policy starting from $\bb^{\mathrm{bdy}}_j$ and record its terminal value.  Equivalent to
   one-step temporal-difference estimation.
 \end{itemize}
-Any of these is unbiased as a baseline (Lemma~\ref{lem:perbatch_substitution}) but they trade
+Any of these is unbiased as a baseline (Lemma~\ref{lem:perseg_substitution}) but they trade
 off variance vs.\ implementation cost.
 
 \subsubsection{Per-trajectory gradient estimator for general \texorpdfstring{$n$}{n}}
-\label{sec:nbatch_estimator}
+\label{sec:nseg_estimator}
 
-Combining \eqref{eq:nbatch_pathwise} and \eqref{eq:nbatch_advantage}, the per-trajectory
+Combining \eqref{eq:nseg_pathwise} and \eqref{eq:nseg_advantage}, the per-trajectory
 gradient estimator with advantage variance reduction is
 \begin{equation}
 g^{(m)}_n
 \;=\;
 \underbrace{\biggl[\frac{\partial \Phi_0}{\partial \bc} + (\nabla_{\bb} \Phi_0)^\top \cdot \nabla_{\bc} \bb_{K_\mathrm{total}}^{(m)}\biggr]}_{\text{pathwise (single chain over } K_\mathrm{total}\text{)}}
 \;+\;
-\sum_{j=1}^{n} \underbrace{A_j^{(m)} \cdot \sum_{k \in \text{batch } j} \nabla_{\bc} \log p\bigl(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)};\, \bc\bigr)}_{\text{per-batch advantage} \times \text{batch-} j \text{ score}}.
-\label{eq:gm_nbatch_full}
+\sum_{j=1}^{n} \underbrace{A_j^{(m)} \cdot \sum_{k \in \text{segment } j} \nabla_{\bc} \log p\bigl(\by_k^{(m)} \mid \bx^{(m)}, \bs_k^{(m)};\, \bc\bigr)}_{\text{per-segment advantage} \times \text{segment-} j \text{ score}}.
+\label{eq:gm_nseg_full}
 \end{equation}
 Aggregating across $M$ samples:
 \begin{equation}
-\widehat{\nabla}_{\bc}\, V^\mathrm{batch}(p_0;\, \bc; \mathcal{M})
+\widehat{\nabla}_{\bc}\, V^\mathrm{segment}(p_0;\, \bc; \mathcal{M})
 \;=\;
 \frac{1}{M} \sum_{m=1}^{M} g^{(m)}_n.
 \end{equation}
-This is unbiased for $\nabla_{\bc} V^\mathrm{batch}$ for any choice of advantage baselines
+This is unbiased for $\nabla_{\bc} V^\mathrm{segment}$ for any choice of advantage baselines
 $\widehat{V}_{\mathrm{global}}^{(j)}$ that depend only on $\bc$ and $\tau_{<j}^{(m)}$.
 
 \paragraph{Per-step cost decomposition.}  Per sample $m$:
 \begin{itemize}[nosep, leftmargin=2em]
 \item One reverse-mode AD pass over the full $K_\mathrm{total}$-step belief-update chain:
       pathwise term.  Cost: $O(K_\mathrm{total} \cdot K_\Phi \cdot d_c)$.
-\item For each of $n$ batch boundaries: one $K_\mathrm{batch}$ Bellman solve to obtain
+\item For each of $n$ segment boundaries: one $K_\mathrm{segment}$ Bellman solve to obtain
       $V^{[j]}_\mathrm{local}$ for the local-Bellman baseline (or alternative).  Cost:
-      $O(n \cdot \mathrm{cost}(K_\mathrm{batch} \text{ Bellman}))$.
+      $O(n \cdot \mathrm{cost}(K_\mathrm{segment} \text{ Bellman}))$.
 \item One additional reverse-mode AD pass for each of the $K_\mathrm{total}$ score-function
       terms: cost $O(K_\mathrm{total} \cdot d_c)$.
 \end{itemize}
-Total per sample: dominated by $n \cdot \mathrm{cost}(K_\mathrm{batch} \text{ Bellman})$ for
+Total per sample: dominated by $n \cdot \mathrm{cost}(K_\mathrm{segment} \text{ Bellman})$ for
 typical problems.  Aggregate over $M$ samples in parallel.
 
 \subsubsection{Sanity check: \texorpdfstring{$n = 2$}{n=2} reduces to \S\ref{sec:full_estimator}}
 
-At $n = 2$, the per-batch sum in \eqref{eq:gm_nbatch_full} contains two terms:
-$j = 1$ (advantage of batch~1) and $j = 2$ (advantage of batch~2).
+At $n = 2$, the per-segment sum in \eqref{eq:gm_nseg_full} contains two terms:
+$j = 1$ (advantage of segment~1) and $j = 2$ (advantage of segment~2).
 \begin{itemize}[nosep, leftmargin=2em]
 \item $A_1 = V_{\mathrm{global}}^{(2)}(\bb^{\mathrm{bdy}}_1;\, \bc) - V_{\mathrm{global}}^{(1)}(p_0;\, \bc)$.
       The second term is $\bc$-only and frequently dropped; the first term is exactly the
-      $V^{[2]}(\bb_{K_\mathrm{batch}}^{(m)};\, \bc)$ that appeared as Term~C of
+      $V^{[2]}(\bb_{K_\mathrm{segment}}^{(m)};\, \bc)$ that appeared as Term~C of
       Equation~\eqref{eq:gm}.
 \item $A_2 = V_{\mathrm{global}}^{(3)}(\bb^{\mathrm{bdy}}_2;\, \bc) - V_{\mathrm{global}}^{(2)}(\bb^{\mathrm{bdy}}_1;\, \bc) = \Phi_0(\bb_{K_\mathrm{total}};\, \bc) - V^{[2]}(\bb^{\mathrm{bdy}}_1;\, \bc)$.
-      The first piece is the realized terminal; the second is the predicted-from-batch-1-end value.
+      The first piece is the realized terminal; the second is the predicted-from-segment-1-end value.
 \end{itemize}
-The pathwise gradient \eqref{eq:nbatch_pathwise} over the $K_\mathrm{total} = 2 K_\mathrm{batch}$
+The pathwise gradient \eqref{eq:nseg_pathwise} over the $K_\mathrm{total} = 2 K_\mathrm{segment}$
 chain coincides with Term~A + Term~B of Equation~\eqref{eq:pathwise}.  The score-function term
 multiplied by $A_1$ corresponds to the score-function-times-baseline-corrected version of
-Term~C.  The score-function term multiplied by $A_2$ contains the batch-2 score-function
-contribution (which was implicitly handled inside Term~B in the two-batch derivation, since
-Term~B used exact within-batch Bellman to integrate over batch-2's outcomes analytically).
+Term~C.  The score-function term multiplied by $A_2$ contains the segment-2 score-function
+contribution (which was implicitly handled inside Term~B in the two-segment derivation, since
+Term~B used exact within-segment Bellman to integrate over segment-2's outcomes analytically).
 
-In short: the $n = 2$ case of \eqref{eq:gm_nbatch_full} is equivalent to
-Equation~\eqref{eq:gm} after baseline shifting and after recognizing that the batch-2
-score-function contribution is implicitly captured inside the batch-2 exact Bellman gradient.
+In short: the $n = 2$ case of \eqref{eq:gm_nseg_full} is equivalent to
+Equation~\eqref{eq:gm} after baseline shifting and after recognizing that the segment-2
+score-function contribution is implicitly captured inside the segment-2 exact Bellman gradient.
 The two derivations agree.
 
 \paragraph{Why one might prefer $n = 2$'s explicit form.}  In the $n = 2$ derivation we kept
-the second batch's exact-Bellman-with-summation-over-outcomes structure as Term~B; this
+the second segment's exact-Bellman-with-summation-over-outcomes structure as Term~B; this
 avoids one of the two stochastic score-function contributions and reduces variance.  For
-general $n$, the analog is to use exact Bellman within the \emph{last} batch (which by
-definition has terminal aligned with the global terminal) and stochastic batched DP only
-for batch boundaries $j = 1, \ldots, n-1$.  This hybrid keeps batch~$n$'s contribution
+general $n$, the analog is to use exact Bellman within the \emph{last} segment (which by
+definition has terminal aligned with the global terminal) and stochastic segmented DP only
+for segment boundaries $j = 1, \ldots, n-1$.  This hybrid keeps segment~$n$'s contribution
 deterministic and fully Bellman-exact, identical to the existing joint-DP gradient
 machinery, while only sampling at boundaries $j < n$.
 
-\subsection{Connection back to single-batch joint-DP}
-\label{sec:single_batch_check}
+\subsection{Connection back to single-segment joint-DP}
+\label{sec:single_seg_check}
 
-For $n = 1$ (single batch with $K_\mathrm{total} = K_\mathrm{batch}$), there is no
-batch-boundary sampling: the entire integral over $\tau$ is performed exactly inside the
+For $n = 1$ (single segment with $K_\mathrm{total} = K_\mathrm{segment}$), there is no
+segment-boundary sampling: the entire integral over $\tau$ is performed exactly inside the
 Bellman recursion via the marginal observation probability sums.
-Equation~\eqref{eq:gm_n} reduces to
+Equation~\eqref{eq:gm_nseg_full} reduces to
 \[
-\nabla_{\bc} V^\mathrm{batch}(p_0;\, \bc)
+\nabla_{\bc} V^\mathrm{segment}(p_0;\, \bc)
 \;=\;
 \nabla_{\bc} V^{[1]}(p_0;\, \bc)
 \;=\;
 \biggl.\frac{\partial V^{[1]}(\bb;\, \bc)}{\partial \bc}\biggr|_{\bb = p_0, \pi^\star \text{ frozen}},
 \]
 which is exactly the sharp-max envelope-theorem gradient of the paper's main framework.
-The score-function term vanishes because there are no batch boundaries and the $\E_\tau$
+The score-function term vanishes because there are no segment boundaries and the $\E_\tau$
 integration is performed exactly.  This recovers the exact-Bellman joint-DP gradient as
-the $n = 1$ specialization of SBDP.  For $n \ge 2$ the additional score-function terms
-appear precisely because the integration over batch-boundary trajectories is replaced by
+the $n = 1$ specialization of SSDP.  For $n \ge 2$ the additional score-function terms
+appear precisely because the integration over segment-boundary trajectories is replaced by
 Monte-Carlo sampling.
 
 \section{The general algorithm}
 
 \begin{algorithm}[H]
-\caption{Stochastic Batched DP}
-\label{alg:sbdp}
+\caption{Stochastic Segmented DP}
+\label{alg:ssdp}
 \begin{algorithmic}[1]
-\Require Initial $\bc^{(0)}$, total horizon $K_\mathrm{total}$, batch length $K_\mathrm{batch}$, sample size $M$, learning rate $\eta$, iterations $T$
+\Require Initial $\bc^{(0)}$, total horizon $K_\mathrm{total}$, segment length $K_\mathrm{segment}$, sample size $M$, learning rate $\eta$, iterations $T$
 \For{$t = 0, 1, \ldots, T - 1$}
     \State $g \gets 0$
     \For{$m = 1, \ldots, M$ (parallel)}
         \State $\bb \gets p_0$
         \State Initialize trajectory $\tau_m \gets ()$
-        \For{$\mathrm{batch} = 1, \ldots, n = K_\mathrm{total} / K_\mathrm{batch}$}
-            \State $(V_\mathrm{batch}, \pi_\mathrm{batch}, \mathrm{memo}_\mathrm{batch}) \gets \mathrm{Bellman}(\bb,\, K_\mathrm{batch},\, \bc^{(t)})$
-            \For{$k = 1, \ldots, K_\mathrm{batch}$}
-                \State $\bs \gets \pi_\mathrm{batch}(\bb)$
+        \For{$\mathrm{segment} = 1, \ldots, n = K_\mathrm{total} / K_\mathrm{segment}$}
+            \State $(V_\mathrm{segment}, \pi_\mathrm{segment}, \mathrm{memo}_\mathrm{segment}) \gets \mathrm{Bellman}(\bb,\, K_\mathrm{segment},\, \bc^{(t)})$
+            \For{$k = 1, \ldots, K_\mathrm{segment}$}
+                \State $\bs \gets \pi_\mathrm{segment}(\bb)$
                 \State $\bx \sim \bb$;  $\by \sim p(\,\cdot \mid \bx, \bs;\, \bc^{(t)})$
                 \State $\bb \gets T(\bb, \bs, \by;\, \bc^{(t)})$
                 \State Append $(\bs, \by, \bb)$ to $\tau_m$
@@ -857,9 +857,9 @@ Monte-Carlo sampling.
 \end{algorithmic}
 \end{algorithm}
 
-\textbf{Complexity per outer iteration}: $M \times n_\mathrm{batches} \times
-\mathrm{cost}(K_\mathrm{batch} \text{ Bellman})$.  In typical regimes,
-$\mathrm{cost}(K_\mathrm{batch} \text{ Bellman}) \approx 10$ seconds, so a single outer
+\textbf{Complexity per outer iteration}: $M \times n_\mathrm{segments} \times
+\mathrm{cost}(K_\mathrm{segment} \text{ Bellman})$.  In typical regimes,
+$\mathrm{cost}(K_\mathrm{segment} \text{ Bellman}) \approx 10$ seconds, so a single outer
 gradient step at $M = 10$ and $n = 4$ takes $\sim 400$ seconds wall-clock without
 parallelism, or $\sim 40$ seconds with $M$-way parallelism on a single multicore node.
 A complete training run of $T = 500$ iterations finishes in 5--7 hours on standard
@@ -869,32 +869,32 @@ hardware.
 \label{sec:convergence}
 
 \paragraph{Per-sample exactness.}  Each $V_m$ in Equation~\eqref{eq:estimator} is computed
-by exact Bellman within its $K_\mathrm{batch}$ subproblem, with the sharp-max
+by exact Bellman within its $K_\mathrm{segment}$ subproblem, with the sharp-max
 envelope-theorem gradient.  No smoothing temperature, no policy approximation, no biased
 inner optimizer.  The per-sample value and gradient are both exact for the trajectory's
 contribution to the estimator.
 
 \paragraph{Estimator bias and variance.}  The estimator
-$\widehat{V}^\mathrm{batch}(p_0;\, \bc; \mathcal{M})$ is unbiased for the true batched
+$\widehat{V}^\mathrm{segment}(p_0;\, \bc; \mathcal{M})$ is unbiased for the true segmented
 value (which is itself an approximation of the full $K_\mathrm{total}$ Bellman value).
 Its variance scales as $\sigma^2 / M$ where $\sigma^2$ depends on the spread of
-$V_0^{\mathrm{batch}_2}$ across reachable batch-boundary beliefs.  In well-conditioned
+$V_0^{\mathrm{segment}_2}$ across reachable segment-boundary beliefs.  In well-conditioned
 problems $\sigma^2$ is small and $M = 10$--$30$ suffices; in problems with bimodal or
-multimodal batch-boundary belief distributions $M$ needs to grow accordingly.
+multimodal segment-boundary belief distributions $M$ needs to grow accordingly.
 
 \paragraph{Convergence rate.}  Under standard SGD assumptions (bounded gradient variance,
 diminishing step sizes), the outer iterates converge to a stationary point of
-$V^\mathrm{batch}(p_0;\, \bc)$ at the standard $1/\sqrt{T}$ rate.  Since the per-sample
+$V^\mathrm{segment}(p_0;\, \bc)$ at the standard $1/\sqrt{T}$ rate.  Since the per-sample
 gradient is exact rather than smoothed, the asymptotic noise floor is set by sampling
 variance alone, not by gradient bias.
 
-\paragraph{Approximation gap to full $K_\mathrm{total}$ Bellman.}  The batched policy is a
-strict approximation of the full $K_\mathrm{total}$ Bellman policy: each batch's lookahead
-is truncated to $K_\mathrm{batch}$, missing the tail value of subsequent batches.  The gap
-$V_0(p_0;\, \bc) - V^\mathrm{batch}(p_0;\, \bc) \ge 0$ is regime-dependent.  When the
-batch-boundary posterior is unimodal and well-concentrated (e.g., $K_\mathrm{batch}$ is
-large enough to "set up" a well-localized belief for subsequent batches), the gap is small.
-When the batch-boundary posterior is multimodal, the gap can be large because batched DP
+\paragraph{Approximation gap to full $K_\mathrm{total}$ Bellman.}  The segmented policy is a
+strict approximation of the full $K_\mathrm{total}$ Bellman policy: each segment's lookahead
+is truncated to $K_\mathrm{segment}$, missing the tail value of subsequent segments.  The gap
+$V_0(p_0;\, \bc) - V^\mathrm{segment}(p_0;\, \bc) \ge 0$ is regime-dependent.  When the
+segment-boundary posterior is unimodal and well-concentrated (e.g., $K_\mathrm{segment}$ is
+large enough to "set up" a well-localized belief for subsequent segments), the gap is small.
+When the segment-boundary posterior is multimodal, the gap can be large because segmented DP
 fails to recognize that $\pi^{(1)}$ should anticipate the disambiguation work of $\pi^{(2)}$.
 
 \section{Connections to existing methods}
@@ -902,32 +902,32 @@ fails to recognize that $\pi^{(1)}$ should anticipate the disambiguation work of
 
 \paragraph{Stochastic gradient descent.}  The construction is structurally identical to
 minibatch SGD on neural networks: full-batch gradient over a finite-but-huge index set
-(here, reachable batch-boundary beliefs) is replaced by a small stochastic mini-batch.  The
+(here, reachable segment-boundary beliefs) is replaced by a small stochastic mini-batch.  The
 unbiasedness, variance, and convergence properties carry over directly.
 
 \paragraph{Stochastic Dual Dynamic Programming (SDDP).}  Pereira and Pinto's SDDP for
 multi-stage stochastic linear programs uses sampled forward-backward sweeps to build
-cutting-plane approximations of the value function.  Stochastic Batched DP is the POMDP
+cutting-plane approximations of the value function.  Stochastic Segmented DP is the POMDP
 analogue: scenarios are replaced by belief trajectories, cutting-plane approximations are
-replaced by exact Bellman within each batch.  The receding-horizon decomposition is a
+replaced by exact Bellman within each segment.  The receding-horizon decomposition is a
 standard MPC pattern in both communities.
 
 \paragraph{Sequential Bayesian experimental design.}  Simulation-based sequential OED
 (Huan and Marzouk; Long, Marzouk, and Wang) uses MC sampling of belief trajectories at
 outer optimization time, but typically with rung-3 myopic information-gain inner policies
-rather than exact Bellman.  Stochastic Batched DP can be viewed as the upgrade of these
-methods from "myopic" to "Bellman within each batch".
+rather than exact Bellman.  Stochastic Segmented DP can be viewed as the upgrade of these
+methods from "myopic" to "Bellman within each segment".
 
 \paragraph{Differentiable POMDP planning.}  Existing differentiable-POMDP work (deep RL
 with NN policies, Karkus et al.\ QMDP-net, etc.) uses NN-parametrized policies with
 end-to-end gradient training.  These methods exhibit a known pathology in joint
 hardware-policy optimization: the NN policy can absorb the training signal and leave the
-hardware near initialization (the "hardware-light fixed point").  Stochastic Batched DP
-sidesteps this by using exact Bellman within each batch, a non-NN inner solver that does
+hardware near initialization (the "hardware-light fixed point").  Stochastic Segmented DP
+sidesteps this by using exact Bellman within each segment, a non-NN inner solver that does
 not have a free policy capacity to absorb hardware-task signal.
 
 \paragraph{Sample-based POMDP solvers (POMCP, DESPOT).}  These methods perform Monte-Carlo
-tree search over the belief space at policy-inference time.  Stochastic Batched DP uses
+tree search over the belief space at policy-inference time.  Stochastic Segmented DP uses
 sampling at outer-gradient time instead, which is a different point of insertion: the
 inner policy is exact Bellman (sample-free), and sampling enters only to estimate the
 outer-hardware gradient.
@@ -935,10 +935,10 @@ outer-hardware gradient.
 \section{Practical guidance}
 \label{sec:practical}
 
-\paragraph{Choosing $K_\mathrm{batch}$.}  Pick the largest $K_\mathrm{batch}$ for which
+\paragraph{Choosing $K_\mathrm{segment}$.}  Pick the largest $K_\mathrm{segment}$ for which
 exact Bellman fits in the available memory budget.  Going larger reduces the
 approximation gap to full Bellman; going smaller reduces per-iteration wall-clock at the
-cost of suboptimal early-batch lookahead.
+cost of suboptimal early-segment lookahead.
 
 \paragraph{Choosing $M$.}  Start at $M = 10$.  Increase if the gradient-step direction is
 noisy enough to slow down Adam convergence (visible as oscillation in the loss trajectory).
@@ -953,29 +953,29 @@ embarrassingly parallel.  On a $C$-core machine, target $M \le C / k_\mathrm{Bel
 where $k_\mathrm{Bellman}$ is the number of cores each individual Bellman solve uses
 effectively (typically 8--64).
 
-\paragraph{Diagnostics.}  Track the per-batch values $V_0^{\mathrm{batch}_j}$ and the
-spread of $V^{(m)}$ across samples.  A high spread indicates that batch-boundary beliefs
-are diverse, which is healthy for sampling but suggests $K_\mathrm{batch}$ may be too
-small.  A monotonically decreasing batch-boundary belief variance across batches
-indicates progressive disambiguation, which is the regime where batched DP works well.
+\paragraph{Diagnostics.}  Track the per-segment values $V_0^{\mathrm{segment}_j}$ and the
+spread of $V^{(m)}$ across samples.  A high spread indicates that segment-boundary beliefs
+are diverse, which is healthy for sampling but suggests $K_\mathrm{segment}$ may be too
+small.  A monotonically decreasing segment-boundary belief variance across segments
+indicates progressive disambiguation, which is the regime where segmented DP works well.
 
 \section{Discussion}
 \label{sec:discussion}
 
-Stochastic Batched DP fills a gap in the relaxation hierarchy between exact Bellman DP
+Stochastic Segmented DP fills a gap in the relaxation hierarchy between exact Bellman DP
 (rung 1, $K_\mathrm{max}$-limited) and the policy-approximation rungs 2--4
 (certainty-equivalent, myopic, Gaussian-trace-EKF).  It preserves exactness of the inner
-solver within each batch and exactness of per-sample gradients via the envelope theorem,
+solver within each segment and exactness of per-sample gradients via the envelope theorem,
 while breaking the reachable-belief enumeration via Monte-Carlo sampling.  The resulting
 method is well-suited to problems where (a) exact Bellman is feasible at modest
-$K_\mathrm{batch}$, (b) the deployment horizon is much larger, and (c) the outer hardware
+$K_\mathrm{segment}$, (b) the deployment horizon is much larger, and (c) the outer hardware
 optimization is the central computational expense.
 
 The framework is particularly natural when combined with point-based value iteration
 (PBVI) or its rho-POMDP extension as the inner solver.  PBVI's $\alpha$-vector
-representation makes the per-sample $K_\mathrm{batch}$ Bellman value $V_0^{\mathrm{batch}_j}(\bb)$
+representation makes the per-sample $K_\mathrm{segment}$ Bellman value $V_0^{\mathrm{segment}_j}(\bb)$
 evaluatable at any belief $\bb$ in $O(|\Gamma| \cdot |\mathcal{X}|)$ time without
-re-solving from scratch.  Combined with the stochastic-batched outer SGD, this lifts the
+re-solving from scratch.  Combined with the stochastic-segmented outer SGD, this lifts the
 horizon ceiling from $K_\mathrm{max} \approx 5$ (exact memoization) to $K_\mathrm{total}$
 of practically arbitrary size.
 

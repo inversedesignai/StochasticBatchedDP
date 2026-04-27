@@ -1,6 +1,6 @@
-# Candidate applications for SBDP
+# Candidate applications for SSDP
 
-Problems where SBDP's specific niche pays off: multimodal or aliased posterior
+Problems where SSDP's specific niche pays off: multimodal or aliased posterior
 that benefits from short-horizon disambiguation before long-horizon refinement,
 high-dimensional differentiable hardware parameters, long horizon required for
 near-Heisenberg scaling, existing adaptive baseline that is suboptimal in the
@@ -54,7 +54,7 @@ symmetry-related parameter ambiguity.  Hardware DOFs are the device used to
 synthesize the evolution: coupler geometry, drive-line filters, readout
 resonator placement.
 
-Active research area (Wiebe, Granade, Jones, etc.).  SBDP slots in cleanly as
+Active research area (Wiebe, Granade, Jones, etc.).  SSDP slots in cleanly as
 the scaling layer above their existing adaptive Bayesian-experimental-design
 schemes.  Weaker baseline literature than Higgins-Wiseman: there is no single
 canonical schedule analogous to geometric Ramsey.  This is double-edged: easier
@@ -74,12 +74,12 @@ identical to fringe aliasing.  Hardware vector:
 Long horizon is automatic across many TRs.  Different audience entirely
 (medical imaging, computational MR), large applied story (faster scans, higher
 contrast, better tissue characterization).  Less explicit quantum flavor, but
-the underlying math maps onto SBDP without modification.
+the underlying math maps onto SSDP without modification.
 
 ### 5. Distributed quantum sensor networks
 
 Joint co-design of N sensor nodes and a measurement-allocation policy for a
-shared field (gravity, magnetic, or rotation).  Each SBDP batch becomes a
+shared field (gravity, magnetic, or rotation).  Each SSDP segment becomes a
 multi-node measurement round; the policy chooses which subset of nodes
 measures, with what integration time, on each round.  The forward model is
 heavier (correlations between nodes, communication latency, distributed
@@ -104,7 +104,7 @@ network scale.
 When evaluating any candidate beyond this list, check:
 
 - Does the posterior multimodality persist past the exact-DP horizon?  If a
-  short schedule already disambiguates, SBDP's advantage shrinks.
+  short schedule already disambiguates, SSDP's advantage shrinks.
 - Is there a canonical adaptive baseline?  Without one, the methodological
   ratio is hard to defend.
 - Are the hardware DOFs differentiable end-to-end?  If forward-model
