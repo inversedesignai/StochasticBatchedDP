@@ -181,6 +181,29 @@ existing terminology avoids reviewer confusion.  The novelty in this note is
 not the recursion itself (well-known since 1998), but its use as the
 canonical terminal value in receding-horizon adaptive measurement.
 
+### 4.5 Per-batch policy structure
+
+The k_rem dependence of V_canonical changes the cross-batch policy structure
+relative to a static V_T.
+
+| Setting                      | Bellman operator         | Policy function           |
+|------------------------------|--------------------------|---------------------------|
+| Static V_T (constant)        | identical across batches | identical π*(b); only realized actions differ across batches because entry beliefs differ |
+| Hybrid V (k_rem-dependent)   | batch-dependent          | different π*_k(b) per batch |
+
+With the hybrid V, each batch's inner Bellman uses a different terminal
+condition (V_canonical evaluated at that batch's boundary k_rem), so the
+resulting policy function differs from batch to batch.  Mathematically this
+is one non-stationary finite-horizon policy π*(b, k_rem) evaluated at the
+appropriate k_rem within each batch.  ψ remains a single shared parameter
+vector if the residual is included; the planner extracts different per-batch
+policies from the same ψ.
+
+**Implementation.**  Recompute the inner Bellman per batch.  The count-tuple
+grid is anchored at each batch's entry belief regardless of V choice, so this
+adds no overhead beyond the existing per-batch recursion.  Caching π*_k(b)
+across batches is not useful because each k has its own k_rem.
+
 ## 5. Adaptive residual on top
 
 V_canonical still assumes optimal *non-adaptive* future continuation.  The
