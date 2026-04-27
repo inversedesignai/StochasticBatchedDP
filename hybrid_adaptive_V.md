@@ -261,15 +261,78 @@ trajectory (handled by the existing SBDP machinery) and the boundary term
 because δ depends on c only through the belief features m_i(b), which feed
 through the within-batch trajectory and are already accounted for there.
 
-## 6. Recommended workflow
+## 6. When the static hybrid suffices
+
+The static hybrid V_canonical (ψ ≡ 0) is expected to suffice for the headline
+SBDP results.  The residual δ is reserved for diagnostic regimes.  Four
+arguments support this expectation.
+
+**6.1 Receding horizon washes out the projection error.**
+
+V_canonical assumes optimal non-adaptive future continuation, but this
+assumption only governs the *projected* boundary value at the current batch.
+The next batch reseeds the recursion at the realized exit belief, replacing
+the projection with adaptive realization.  Cumulative non-adaptive bias is
+bounded by the per-batch projection error, not by K_total.  The error does
+not compound across batches.
+
+**6.2 The inner Bellman absorbs adaptation locally.**
+
+K_batch = 4 of exact Bellman is genuine adaptive lookahead.  Disambiguation
+at φ_max = 0.5 (short τ first to break the 2π aliasing, long τ for refinement
+once the posterior is unimodal) operates on a 1-3 step timescale.  K_batch = 4
+captures the qualitative posterior transitions; the non-adaptive projection
+is approximately correct once the posterior has gone unimodal, which happens
+within one or two batches.
+
+**6.3 Multimodality already enters through Var(b).**
+
+The 1/Var(b) prior term inflates V_canonical exactly when the boundary belief
+is multimodal.  This is the disambiguation pressure that δ would otherwise
+have to learn.  The static hybrid gets it for free, no fitting required.
+
+**6.4 Adaptive vs non-adaptive affects constants, not scaling.**
+
+For the headline SBDP-vs-HW ratio (5× at K = 16, 10× at K = 32), the leading
+scaling of the ratio is set by Heisenberg vs shot-noise-limited continuation,
+which is the same for adaptive and non-adaptive optimal future schedules.
+The adaptive correction at the boundary is a constant-factor improvement,
+plausibly under 2× even at φ_max = 0.5.  The static hybrid likely lands
+within that factor of the fully adaptive optimum, comfortably preserving
+the order-of-magnitude headline.
+
+### 6.5 When the residual becomes load-bearing
+
+Three regimes where δ should be added back:
+
+- **K_batch reduced to 2 or 1** (memory-constrained variant).  Less inner
+  adaptive lookahead, more burden on the boundary value, larger projection
+  error per batch.
+- **Increment A underperforms expectations** AND ablation shows the gap is
+  at the boundary value rather than outer-SGD optimization noise.  Diagnostic
+  test: SBDP at K_total = 16 lands close to HW (ratio < 3×), and inflating
+  K_batch to 8 closes the gap.  This isolates the deficit to lookahead.
+- **Reviewer or co-author requests the fully adaptive version** as a
+  robustness check.  Cheap to add as a follow-up; do not let it block
+  Phase 1.
+
+### 6.6 Decision rule
+
+Run Phase 1 calibration with ψ ≡ 0.  Add δ only if Phase 1 underperforms
+*and* the diagnostic above isolates the gap to the boundary value.  This
+keeps the primary contribution legible: a closed-form receding-horizon
+Bayesian-CRB anchor is a single-sentence theoretical statement.  The learned
+residual is a one-paragraph extension if needed, omitted otherwise.
+
+## 7. Recommended workflow
 
 Three increments, each independently testable.
 
 **Increment A (Phase 1 calibration).**  Static V_canonical only, ψ = 0.  This
 is the closed-form BCRB hybrid.  No learning, no extra moving parts.  Use
 this as the reference SBDP run.  If this already meets the headline targets
-(K_total = 16: ≥ 5× HW; K_total = 32: ≥ 10× HW), the residual is
-unnecessary and the writeup stays simple.
+(K_total = 16: ≥ 5× HW; K_total = 32: ≥ 10× HW), the residual is unnecessary
+and the writeup stays simple.  Per Section 6 this is the expected outcome.
 
 **Increment B (Phase 3 if needed).**  Add δ with the parameterization above,
 λ large (heavy regularization).  Goal: shave residual gap, demonstrate that
@@ -279,7 +342,7 @@ the static hybrid is already close to optimal.
 Compare to Increment A as ablation.  Report the SBDP-vs-HW ratio under each
 of the three settings.
 
-## 7. Implementation notes
+## 8. Implementation notes
 
 **Computing Var(b).**  For the count-tuple belief representation, Var(b) is
 the wrapped variance of the discrete posterior over φ.  Closed-form, O(N_φ)
@@ -301,7 +364,7 @@ the residual bounded by V_canonical.  This prevents the runaway-target
 pathology of unconstrained value learning.  Combined with target-network
 ψ_target updates and an L2 prior, the ψ training is well-behaved.
 
-## 8. Summary
+## 9. Summary
 
 The terminal value V_T at SBDP batch boundaries should be the recursive
 Bayesian Cramer-Rao bound seeded at the current belief and propagated forward
@@ -313,6 +376,13 @@ This is the unique closed-form expression that combines the strengths of the
 posterior-variance and PCRB-sum anchors without the scale and bias problems
 of either alone.  It recovers posterior variance at the final batch boundary,
 PCRB-sum asymptotics at long horizon, and is multimodality-aware through the
-Var(b) term.  An optional learned residual δ ≤ 0, gated by V_canonical and
-constrained to vanish at k_rem = 0, can adapt away the remaining gap from the
-non-adaptive assumption while keeping the static hybrid as a clean fallback.
+Var(b) term.
+
+The static hybrid (ψ ≡ 0) is expected to suffice for the headline SBDP
+results: receding horizon caps the projection error per batch, K_batch = 4
+of inner Bellman absorbs local adaptation, Var(b) supplies multimodality
+pressure for free, and adaptive vs non-adaptive at the boundary is a
+constant-factor correction below the headline order of magnitude.  An
+optional learned residual δ ≤ 0, gated by V_canonical and constrained to
+vanish at k_rem = 0, is reserved for diagnostic regimes (K_batch ≤ 2,
+isolated boundary-value gap from ablation).
